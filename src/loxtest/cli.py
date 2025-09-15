@@ -6,29 +6,28 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from signal import SIGINT
+from subprocess import CalledProcessError
 from tempfile import TemporaryDirectory
 
 URL = "https://github.com/munificent/craftinginterpreters.git"
 REMOTE_TESTS_DIR = "test"
 
-
-RULES = {
-    "line_number": {
-        "static": {r"(//)( Error)": r"\1 [line {line_number}]\2"},
-        "runtime": {r"(// expect runtime error:)(?! \[line \d+])": r"\1 [line {line_number}]"},
-    },
-    "remove_prefix": {
-        "default": {r"\[{prefix} (line \d+)]": r"[\1]"},
-    },
+LINE_NB_RULES: dict[str, dict[str, str]] = {
+    "static": {r"(//)( Error)": r"\1 [line {line_number}]\2"},
+    "runtime": {r"(// expect runtime error:)(?! \[line \d+])": r"\1 [line {line_number}]"},
 }
 
-RESOURCES = {
-    "ast-generator": "generate_ast.py",
-    "ast-printer": "print_ast.py",
-}
+PREFIX_RULE: dict[str, str] = {r"\[{prefix} (line \d+)]": r"[\1]"}
 
 
-def download(destination: Path, url: str, remote_tests_dir: str, force: bool = False):
+class CommandError(Exception):
+    def __init__(self, message: str, exit_code: int = 1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+def download(destination: Path, url: str, remote_tests_dir: str, force: bool = False) -> None:
     if destination.exists() and not force:
         raise FileExistsError(f"Destination '{destination}' already exists.")
 
@@ -39,7 +38,7 @@ def download(destination: Path, url: str, remote_tests_dir: str, force: bool = F
     with TemporaryDirectory() as temp_dir:
         commands = [
             [git, "clone", "--no-checkout", "--depth=1", "--filter=blob:none", url, "."],
-            ["git", "sparse-checkout", "set", "--no-cone", remote_tests_dir],
+            [git, "sparse-checkout", "set", "--no-cone", remote_tests_dir],
             [git, "checkout"],
         ]
         for cmd in commands:
@@ -58,7 +57,33 @@ def download(destination: Path, url: str, remote_tests_dir: str, force: bool = F
         shutil.move(source, destination)
 
 
-def process_file(path: Path, rules: dict[re.Pattern, str]):
+def process_rules(
+    line_nb_rules: dict[str, dict[str, str]],
+    prefix_rule: dict[str, str],
+    line_number: list[str],
+    prefixes: list[str],
+) -> dict[re.Pattern[str], str]:
+    result: dict[str, str] = {}
+
+    result.update(
+        {
+            pattern: replacement
+            for mode in line_number
+            for pattern, replacement in line_nb_rules[mode].items()
+        }
+    )
+    result.update(
+        {
+            pattern.format(prefix=prefix): replacement
+            for prefix in prefixes
+            for pattern, replacement in prefix_rule.items()
+        }
+    )
+
+    return {re.compile(pattern): replacement for pattern, replacement in result.items()}
+
+
+def process_file(path: Path, rules: dict[re.Pattern[str], str]) -> None:
     text = path.read_text()
     has_trailing_newline = text.endswith("\n")
     lines = text.splitlines()
@@ -71,127 +96,70 @@ def process_file(path: Path, rules: dict[re.Pattern, str]):
     path.write_text(text)
 
 
-def get_prefix_rules(
-    rules: dict[str, dict[str, dict[str, str]]], prefixes: list[str]
-) -> dict[str, str]:
-    rule = rules["remove_prefix"]["default"]
-    pattern, replacement = next(iter(rule.items()))
-
-    return {pattern.format(prefix=prefix): replacement for prefix in prefixes}
-
-
-def get_line_number_rules(
-    rules: dict[str, dict[str, dict[str, str]]], line_number: list[str]
-) -> dict[str, str]:
-    return {
-        pattern: replacement
-        for mode in line_number
-        for pattern, replacement in rules["line_number"][mode].items()
-    }
-
-
-def process_rules(
-    rules: dict[str, dict[str, dict[str, str]]], line_number: list[str], prefixes: list[str]
-):
-    result: dict[str, str] = {}
-
-    result.update(get_line_number_rules(rules, line_number))
-    result.update(get_prefix_rules(rules, prefixes))
-
-    return {re.compile(pattern): replacement for pattern, replacement in result.items()}
-
-
 def process_directory(
     path: Path,
-    rules: dict[str, dict[str, dict[str, str]]],
+    line_nb_rules: dict[str, dict[str, str]],
+    prefix_rule: dict[str, str],
     line_number: list[str],
     prefixes: list[str],
-):
+) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f"Directory '{path}' does not exist.")
+    if not path.is_dir():
+        raise ValueError(f"Path '{path}' is not a directory.")
+    if not (paths := list(path.rglob("*.lox"))):
+        raise FileNotFoundError(f"No '.lox' files found in '{path}'.")
+
     print(f"Processing files in '{path}'...")
-    paths = path.rglob("*.lox")
-    active_rules = process_rules(rules, line_number, prefixes)
+    active_rules = process_rules(line_nb_rules, prefix_rule, line_number, prefixes)
     for path in paths:
         process_file(path, active_rules)
     print("Processing complete.")
 
 
-def handle_setup(args: argparse.Namespace):
-    download(args.directory, args.url, args.remote_tests_dir, args.force)
-    process_directory(args.directory, args.rules, args.line_number, args.prefixes)
+def handle_download(args: argparse.Namespace) -> None:
+    download(
+        args.directory,
+        args.url,
+        args.remote_tests_dir,
+        args.force,
+    )
 
 
-def handle_download(args: argparse.Namespace):
-    try:
-        download(
-            args.directory,
-            args.url,
-            args.remote_tests_dir,
-            args.force,
-        )
-    except (FileExistsError, FileNotFoundError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def handle_process(args: argparse.Namespace):
-    if not (args.line_number or args.prefix):
-        args.parser.error("no transformation specified.")
-
+def handle_process(args: argparse.Namespace) -> None:
     process_directory(
         args.directory,
-        args.rules,
+        args.line_nb_rules,
+        args.prefix_rule,
         args.line_number,
         args.prefix,
     )
 
 
-def handle_run(args: argparse.Namespace, *unknown_args):
+def handle_run(args: argparse.Namespace, *unknown_args: str) -> None:
     cmd = ["pytest"]
     if args.pytest_help:
-        subprocess.run(cmd + ["--help"])
-        return
-    if args.interpreter_cmd:
-        cmd.extend(["--interpreter_cmd", args.interpreter_cmd])
-    if args.skip_dirs:
-        cmd.extend([item for dir in args.skip_dirs for item in ["--skip_dirs", dir]])
+        cmd.append("--help")
+    else:
+        if args.interpreter_cmd:
+            cmd.extend(["--interpreter_cmd", args.interpreter_cmd])
+        if args.skip_dirs:
+            cmd.extend([item for dir in args.skip_dirs for item in ("--skip_dirs", dir)])
 
     cmd.extend(list(unknown_args))
-    subprocess.run(cmd)
+
+    try:
+        process = subprocess.run(cmd)
+    except OSError as e:
+        # exit code that doesn't conflict with pytest's exit codes (0-5)
+        raise CommandError(str(e), exit_code=6) from e
+
+    sys.exit(process.returncode)
 
 
-def handle_clean(args: argparse.Namespace):
-    if not args.directory.is_dir():
-        print(f"Error:Directory not found: {args.directory}", file=sys.stderr)
-        sys.exit(1)
-
-    if not (force := args.force):
-        response = input(f"Are you sure you want to permanently delete {args.directory}? [y/N] ")
-        force = response.lower() == "y"
-
-    if force:
-        shutil.rmtree(args.directory)
-        print(f"Successfully removed {args.directory}")
-    else:
-        print("The 'clean' command was cancelled.")
-
-
-def handle_export(args: argparse.Namespace):
-    for resource in set(args.resource):
-        project_root = Path(__file__).parent.parent.parent
-        resource_path = project_root / "scripts" / RESOURCES[resource]
-        destination_path = Path.cwd() / resource_path.name
-        if destination_path.exists() and not args.force:
-            print("File already exists. Use --force to overwrite.", file=sys.stderr)
-            sys.exit(1)
-        shutil.copy(resource_path, destination_path)
-        print(f"Exported '{resource_path.name}' to current directory.")
-
-
-def main():
+def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "A toolkit for downloading and running the Crafting Interpreters Lox test suite."
-        ),
+        description=("A toolkit for downloading and running the official Lox test suite."),
         formatter_class=argparse.RawTextHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -200,35 +168,20 @@ def main():
     path_parser.add_argument(
         "directory",
         type=Path,
+        metavar="PATH",
         help="Directory where the operation will be performed.",
-    )
-
-    force_parser = argparse.ArgumentParser(add_help=False)
-    force_parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        help="Overwrite destination directory if it exists.",
-    )
-
-    parser_setup = subparsers.add_parser(
-        "setup",
-        parents=[path_parser, force_parser],
-        help="Download and process all tests in one step.",
-    )
-    parser_setup.set_defaults(
-        func=handle_setup,
-        url=URL,
-        remote_tests_dir=REMOTE_TESTS_DIR,
-        rules=RULES,
-        line_number=["static", "runtime"],
-        prefixes=["java"],
     )
 
     parser_download = subparsers.add_parser(
         "download",
-        parents=[path_parser, force_parser],
+        parents=[path_parser],
         help="Download the official Lox test suite.",
+    )
+    parser_download.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite destination directory if it exists.",
     )
     parser_download.set_defaults(
         func=handle_download,
@@ -259,7 +212,9 @@ def main():
         default=[],
         help="Remove a language prefix. (Choices: 'java', 'c').",
     )
-    parser_process.set_defaults(func=handle_process, rules=RULES)
+    parser_process.set_defaults(
+        func=handle_process, line_nb_rules=LINE_NB_RULES, prefix_rule=PREFIX_RULE
+    )
 
     parser_run = subparsers.add_parser(
         "run",
@@ -286,31 +241,37 @@ def main():
     )
     parser_run.set_defaults(func=handle_run)
 
-    parser_clean = subparsers.add_parser(
-        "clean",
-        parents=[path_parser, force_parser],
-        help="Remove a directory of downloaded tests.",
-    )
-    parser_clean.set_defaults(func=handle_clean)
+    return parser
 
-    parser_export = subparsers.add_parser(
-        "export",
-        parents=[force_parser],
-        help="Export a resource to the current directory.",
-    )
-    parser_export.add_argument(
-        "resource",
-        nargs="+",
-        choices=["ast-generator", "ast-printer"],
-        help="The resource to export.",
-    )
-    parser_export.set_defaults(func=handle_export)
 
+def get_parsed_arguments() -> tuple[argparse.Namespace, list[str]]:
+    parser = get_parser()
     args, unknown_args = parser.parse_known_args()
     if args.command != "run" and unknown_args:
         parser.parse_args()
-    args.parser = parser
-    args.func(args, *unknown_args)
+    if args.command == "process" and not (args.line_number or args.prefix):
+        parser.error("no transformation specified.")
+
+    return args, unknown_args
+
+
+def main() -> None:
+    args, unknown_args = get_parsed_arguments()
+
+    try:
+        args.func(args, *unknown_args)
+    except (CalledProcessError, CommandError, OSError, ValueError) as e:
+        exit_code = e.exit_code if isinstance(e, CommandError) else 1
+
+        msg = f"Error: {e}"
+        if isinstance(e, CalledProcessError):
+            msg = f"{e.stderr.strip()}\n{msg}"
+
+        print(msg, file=sys.stderr)
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print("\nOperation aborted by user.", file=sys.stderr)
+        sys.exit(128 + SIGINT)
 
 
 if __name__ == "__main__":
