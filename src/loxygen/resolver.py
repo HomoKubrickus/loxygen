@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from enum import Enum
 from enum import auto
 
@@ -30,22 +31,15 @@ class Resolver:
         self.current_class = ClassType.NONE
         self.errors: list[tuple[Token, str]] = []
 
+    @property
+    def current_scope(self):
+        return self.scopes[-1]
+
     def resolve(self, *statements: expr.Expr | stmt.Stmt):
         for statement in statements:
             statement.accept(self)
 
-    def resolve_function(self, function: stmt.Function, function_type: FunctionType):
-        enclosing_function = self.current_function
-        self.current_function = function_type
-        self.begin_scope()
-        for param in function.params:
-            self.declare(param)
-            self.define(param)
-
-        self.resolve(*function.body)
-        self.end_scope()
-        self.current_function = enclosing_function
-
+    @contextmanager
     def scope(self):
         try:
             self.scopes.append({})
@@ -53,28 +47,20 @@ class Resolver:
         finally:
             self.scopes.pop()
 
-    def begin_scope(self):
-        self.scopes.append({})
-
-    def end_scope(self):
-        self.scopes.pop()
-
     def declare(self, name: Token):
         if self.scopes:
-            scope = self.scopes[-1]
-            if name.lexeme in scope:
+            if name.lexeme in self.current_scope:
                 self.errors.append(
                     (
                         name,
                         "Already a variable with this name in this scope.",
                     ),
                 )
-            scope[name.lexeme] = False
+            self.current_scope[name.lexeme] = False
 
     def define(self, name: Token):
         if self.scopes:
-            scope = self.scopes[-1]
-            scope[name.lexeme] = True
+            self.current_scope[name.lexeme] = True
 
     def resolve_local(self, expression: expr.Expr, name: Token):
         for idx, scope in enumerate(reversed(self.scopes)):
@@ -82,10 +68,29 @@ class Resolver:
                 self.interpreter.resolve(expression, idx)
                 break
 
+    def resolve_function(self, function: stmt.Function, function_type: FunctionType):
+        enclosing_function = self.current_function
+        self.current_function = function_type
+        with self.scope():
+            for param in function.params:
+                self.declare(param)
+                self.define(param)
+            self.resolve(*function.body)
+
+        self.current_function = enclosing_function
+
+    def resolve_class_body(self, stmt: stmt.Class):
+        with self.scope():
+            self.current_scope["this"] = True
+            for method in stmt.methods:
+                declaration = FunctionType.METHOD
+                if method.name.lexeme == "init":
+                    declaration = FunctionType.INITIALIZER
+                self.resolve_function(method, declaration)
+
     def visit_block_stmt(self, stmt: stmt.Block):
-        self.begin_scope()
-        self.resolve(*stmt.statements)
-        self.end_scope()
+        with self.scope():
+            self.resolve(*stmt.statements)
 
     def visit_class_stmt(self, stmt: stmt.Class):
         enclosing_class = self.current_class
@@ -94,31 +99,23 @@ class Resolver:
         self.declare(stmt.name)
         self.define(stmt.name)
 
-        if stmt.superclass is not None and stmt.name.lexeme == stmt.superclass.name.lexeme:
-            self.errors.append(
-                (
-                    stmt.superclass.name,
-                    "A class can't inherit from itself.",
-                ),
-            )
-
         if stmt.superclass is not None:
+            if stmt.name.lexeme == stmt.superclass.name.lexeme:
+                self.errors.append(
+                    (
+                        stmt.superclass.name,
+                        "A class can't inherit from itself.",
+                    ),
+                )
+
             self.current_class = ClassType.SUBCLASS
             self.resolve(stmt.superclass)
-            self.begin_scope()
-            self.scopes[-1]["super"] = True
+            with self.scope():
+                self.current_scope["super"] = True
+                self.resolve_class_body(stmt)
 
-        self.begin_scope()
-        self.scopes[-1]["this"] = True
-        for method in stmt.methods:
-            declaration = FunctionType.METHOD
-            if method.name.lexeme == "init":
-                declaration = FunctionType.INITIALIZER
-            self.resolve_function(method, declaration)
-
-        self.end_scope()
-        if stmt.superclass is not None:
-            self.end_scope()
+        else:
+            self.resolve_class_body(stmt)
 
         self.current_class = enclosing_class
 
@@ -230,7 +227,7 @@ class Resolver:
         self.resolve(expression.right)
 
     def visit_variable_expr(self, expression: expr.Variable):
-        if self.scopes and self.scopes[-1].get(expression.name.lexeme) is False:
+        if self.scopes and self.current_scope.get(expression.name.lexeme) is False:
             self.errors.append(
                 (
                     expression.name,
