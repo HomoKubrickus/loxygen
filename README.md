@@ -1,6 +1,6 @@
 # Loxygen: A Python Lox Interpreter and Test Tool
 
-[![TestPyPI version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://pypi.org/project/loxygen/)
+[![PyPI version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://pypi.org/project/loxygen/)
 [![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/HomoKubrickus/loxygen/blob/main/LICENSE)
 

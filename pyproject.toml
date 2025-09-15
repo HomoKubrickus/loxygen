@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loxygen"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Lox interpreter in Python and a pytest plugin for testing Lox interpreters."
 readme = "README.md"
 license = "MIT"
