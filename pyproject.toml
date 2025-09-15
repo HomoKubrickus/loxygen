@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=80.9", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loxygen"
+version = "0.1.0"
+description = "A Lox interpreter in Python and a pytest plugin for testing Lox interpreters."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["pytest>=8.3"]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.17", "pre-commit>=3.8", "ruff>=0.12"]
+
+[project.scripts]
+"loxygen" = "loxygen.__main__:main"
+"loxtest" = "loxtest.cli:main"
+
+[project.entry-points.pytest11]
+lox_tester_plugin = "loxtest.plugin"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["*"]
+
+[tool.mypy]
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+force-single-line = true
+
+[tool.pytest.ini_options]
+interpreter_cmd = "loxygen"
+skip_dirs = ["benchmark", "scanning", "limit", "expressions"]
