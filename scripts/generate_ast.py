@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from shutil import which
+
+type FieldList = tuple[tuple[str, str], ...]
+type SubclassMap = dict[str, FieldList]
+type NodeDefinitions = dict[str, SubclassMap]
+
 
 PACKAGE_NAME = "loxygen"
 FORMATTER = "ruff"
 INDENT = 4
 
 
-MAPPING: dict[str, dict[str, tuple[tuple[str, str], ...]]] = {
+NODE_DEFS: NodeDefinitions = {
     "Expr": {
         "Assign": (("name", "Token"), ("value", "Expr")),
         "Binary": (("left", "Expr"), ("operator", "Token"), ("right", "Expr")),
@@ -52,61 +58,40 @@ class NodeGenerator:
         self,
         class_name: str,
         base_class: str | None = None,
-        params: tuple[tuple[str, str]] | None = None,
+        attrs: FieldList = (),
         indent: int = INDENT,
     ):
         self.class_name = class_name
         self.base_class = base_class
-        self.params = params
+        self.attrs = attrs
         self.indent = " " * indent
-        self.text: list[str] = []
-        self.level = 0
 
-    def add_line(self, text):
-        self.text.append(self.level * self.indent + text)
+    def format_line(self, text, level):
+        return self.indent * level + text
 
-    def add_class_declaration(self):
-        text = f"class {self.class_name}"
-        text += ":" if self.base_class is None else f"({self.base_class}):"
-        self.add_line(text)
+    def generate_class_declaration(self):
+        yield self.format_line("@dataclass(frozen=True, slots=True)", 0)
+        cls = f"class {self.class_name}"
+        cls += ":" if self.base_class is None else f"({self.base_class}):"
+        yield self.format_line(cls, 0)
 
-    def add_function_declaration(self, name, params):
-        self.level = 1
-        params = ",".join(
-            param + f":{annotation}" if annotation else param for param, annotation in params
+    def generate_attrs(self):
+        for attr, annotation in self.attrs:
+            yield self.format_line(f"{attr}:{annotation}", 1)
+
+    def generate_accept_method(self):
+        yield self.format_line("def accept(self, visitor):", 1)
+        body = (
+            "pass"
+            if self.base_class is None
+            else f"return visitor.visit_{self.class_name.lower()}_{self.base_class.lower()}(self)"
         )
-        declaration = f"def {name}({params}):"
-        self.add_line(declaration)
-
-    def add_init_body(self):
-        self.level = 2
-        for param, _ in self.params:
-            self.add_line(f"self.{param} = {param}")
-
-    def add_accept_body(self):
-        self.level = 2
-        if self.base_class is None:
-            self.add_line("pass")
-        else:
-            self.add_line(
-                f"return visitor.visit_{self.class_name.lower()}_{self.base_class.lower()}(self)",
-            )
-
-    def generate_parent_class(self):
-        self.add_class_declaration()
-        self.add_function_declaration("accept", (("self", ""), ("visitor", "")))
-        self.add_accept_body()
-
-        return self.text
+        yield self.format_line(body, 2)
 
     def generate_class(self):
-        self.add_class_declaration()
-        self.add_function_declaration("__init__", (("self", ""),) + self.params)
-        self.add_init_body()
-        self.add_function_declaration("accept", (("self", ""), ("visitor", "")))
-        self.add_accept_body()
-
-        return self.text
+        yield from self.generate_class_declaration()
+        yield from self.generate_attrs()
+        yield from self.generate_accept_method()
 
 
 def format_file(text: str, formatter: str) -> str:
@@ -137,32 +122,36 @@ def format_file(text: str, formatter: str) -> str:
     return process.stdout
 
 
-def generate_nodes_file(base_class, mapping, package_name, formatter: str, filename: Path):
-    lines: list[str] = []
+def generate_all_nodes(
+    base_class: str, package_name: str, subclass_defs: SubclassMap
+) -> Iterator[str]:
+    yield "from dataclasses import dataclass"
     if base_class == "Stmt":
-        lines.extend(
-            (
-                f"from {package_name}.expr import Expr",
-                f"from {package_name}.expr import Variable",
-            )
-        )
-    lines.append(f"from {package_name}.lox_token import Token")
-    lines.extend(NodeGenerator(base_class).generate_parent_class())
+        yield f"from {package_name}.expr import Expr"
+        yield f"from {package_name}.expr import Variable"
+    yield f"from {package_name}.lox_token import Token"
 
-    for cls, attrs in mapping.items():
-        lines.extend(NodeGenerator(cls, base_class, attrs).generate_class())
+    yield from NodeGenerator(base_class).generate_class()
 
+    for class_name, attrs in subclass_defs.items():
+        yield from NodeGenerator(class_name, base_class, attrs).generate_class()
+
+
+def generate_nodes_file(
+    base_class: str, package_name: str, subclass_defs: SubclassMap, formatter: str, filename: Path
+) -> None:
+    lines = generate_all_nodes(base_class, package_name, subclass_defs)
     text = format_file("\n".join(lines), formatter)
     filename.write_text(text)
     print(f"File saved to {filename}")
 
 
-def main(mapping: dict[str, dict], package_name: str, formatter: str):
-    for base_class, nodes_dict in mapping.items():
+def main(node_defs: NodeDefinitions, package_name: str, formatter: str) -> None:
+    for base_class, nodes_dict in node_defs.items():
         root = Path(__file__).parent.parent.resolve()
         filename = root / "src" / package_name / f"{base_class.lower()}.py"
-        generate_nodes_file(base_class, nodes_dict, package_name, formatter, filename)
+        generate_nodes_file(base_class, package_name, nodes_dict, formatter, filename)
 
 
 if __name__ == "__main__":
-    main(MAPPING, PACKAGE_NAME, FORMATTER)
+    main(NODE_DEFS, PACKAGE_NAME, FORMATTER)
