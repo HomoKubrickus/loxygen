@@ -3,12 +3,12 @@ from __future__ import annotations
 from loxygen import nodes
 from loxygen.environment import Environment
 from loxygen.exceptions import LoxRunTimeError
-from loxygen.lox_callable import Callable
-from loxygen.lox_callable import Clock
-from loxygen.lox_class import LoxClass
-from loxygen.lox_function import LoxFunction
-from loxygen.lox_instance import LoxInstance
-from loxygen.returner import Return
+from loxygen.runtime import Callable
+from loxygen.runtime import Clock
+from loxygen.runtime import LoxClass
+from loxygen.runtime import LoxFunction
+from loxygen.runtime import LoxInstance
+from loxygen.runtime import Return
 from loxygen.token import Token
 from loxygen.token import TokenType
 
