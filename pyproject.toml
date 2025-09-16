@@ -15,7 +15,7 @@ dependencies = ["pytest>=8.3"]
 dev = ["mypy>=1.17", "pre-commit>=3.8", "ruff>=0.12"]
 
 [project.scripts]
-"loxygen" = "loxygen.__main__:main"
+"loxygen" = "loxygen.loxygen:main"
 "loxtest" = "loxtest.cli:main"
 
 [project.entry-points.pytest11]

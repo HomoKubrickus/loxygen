@@ -85,3 +85,11 @@ class Lox:
             token = f"Error at {position}: "
 
         print(f"[line {line}] {token}{message}", file=sys.stderr)
+
+
+def main():
+    Lox().main(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    main()
