@@ -3,34 +3,34 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from loxygen import expr
+from loxygen import nodes
 from loxygen.parser import Parser
 from loxygen.scanner import Scanner
 
 
 class ASTPrinter:
-    def visit_binary_expr(self, expression: expr.Binary):
+    def visit_binary_expr(self, expression: nodes.Binary):
         return self.parenthesize(expression.operator.lexeme, expression.left, expression.right)
 
-    def visit_grouping_expr(self, expression: expr.Grouping):
+    def visit_grouping_expr(self, expression: nodes.Grouping):
         return self.parenthesize("group", expression.expression)
 
-    def visit_literal_expr(self, expression: expr.Literal):
+    def visit_literal_expr(self, expression: nodes.Literal):
         if expression.value is None:
             return "nil"
         return str(expression.value)
 
-    def visit_unary_expr(self, expression: expr.Unary):
+    def visit_unary_expr(self, expression: nodes.Unary):
         return self.parenthesize(expression.operator.lexeme, expression.right)
 
-    def parenthesize(self, name: str, *exprs: expr.Expr):
+    def parenthesize(self, name: str, *exprs: nodes.Expr):
         output = f"({name}"
         for expression in exprs:
             output += f" {expression.accept(self)}"
         output += ")"
         return output
 
-    def print(self, expression: expr.Expr):
+    def print(self, expression: nodes.Expr):
         return expression.accept(self)
 
 

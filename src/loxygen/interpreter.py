@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from loxygen import expr
-from loxygen import stmt
+from loxygen import nodes
 from loxygen.environment import Environment
 from loxygen.exceptions import LoxRunTimeError
 from loxygen.lox_callable import Callable
@@ -22,10 +21,10 @@ class Interpreter:
 
         self.env = self.globals
 
-    def visit_literal_expr(self, expression: expr.Literal):
+    def visit_literal_expr(self, expression: nodes.Literal):
         return expression.value
 
-    def visit_logical_expr(self, expression: expr.Logical):
+    def visit_logical_expr(self, expression: nodes.Logical):
         left = self.evaluate(expression.left)
         if expression.operator.type == TokenType.OR:
             if self.is_truthy(left):
@@ -36,7 +35,7 @@ class Interpreter:
 
         return self.evaluate(expression.right)
 
-    def visit_set_expr(self, expression: expr.Set):
+    def visit_set_expr(self, expression: nodes.Set):
         object = self.evaluate(expression.object)
         if not isinstance(object, LoxInstance):
             raise LoxRunTimeError(expression.name, "Only instances have fields.")
@@ -46,7 +45,7 @@ class Interpreter:
 
         return value
 
-    def visit_super_expr(self, expression: expr.Super):
+    def visit_super_expr(self, expression: nodes.Super):
         distance = self.locals.get(expression)
         superclass = self.env.get_at(distance, "super")
         object = self.env.get_at(distance - 1, "this")
@@ -59,10 +58,10 @@ class Interpreter:
 
         return method.bind(object)
 
-    def visit_this_expr(self, expression: expr.This):
+    def visit_this_expr(self, expression: nodes.This):
         return self.look_up_variable(expression.keyword, expression)
 
-    def visit_unary_expr(self, expression: expr.Unary):
+    def visit_unary_expr(self, expression: nodes.Unary):
         right = self.evaluate(expression.right)
         match expression.operator.type:
             case TokenType.BANG:
@@ -76,16 +75,16 @@ class Interpreter:
         if not isinstance(operand, float):
             raise LoxRunTimeError(operator, "Operand must be a number.")
 
-    def visit_variable_expr(self, expression: expr.Variable):
+    def visit_variable_expr(self, expression: nodes.Variable):
         return self.look_up_variable(expression.name, expression)
 
-    def look_up_variable(self, name: Token, expression: expr.Expr):
+    def look_up_variable(self, name: Token, expression: nodes.Expr):
         distance = self.locals.get(expression)
         if distance is not None:
             return self.env.get_at(distance, name.lexeme)
         return self.globals.get(name)
 
-    def visit_binary_expr(self, expression: expr.Binary):
+    def visit_binary_expr(self, expression: nodes.Binary):
         left = self.evaluate(expression.left)
         right = self.evaluate(expression.right)
 
@@ -132,7 +131,7 @@ class Interpreter:
         if not isinstance(left, float) or not isinstance(right, float):
             raise LoxRunTimeError(operator, "Operands must be numbers.")
 
-    def visit_call_expr(self, expression: expr.Call):
+    def visit_call_expr(self, expression: nodes.Call):
         callee = self.evaluate(expression.callee)
         arguments = [self.evaluate(argument) for argument in expression.arguments]
 
@@ -150,14 +149,14 @@ class Interpreter:
 
         return callee.call(self, arguments)
 
-    def visit_get_expr(self, expression: expr.Get):
+    def visit_get_expr(self, expression: nodes.Get):
         object = self.evaluate(expression.object)
         if isinstance(object, LoxInstance):
             return object.get(expression.name)
 
         raise LoxRunTimeError(expression.name, "Only instances have properties.")
 
-    def visit_grouping_expr(self, expression: expr.Grouping):
+    def visit_grouping_expr(self, expression: nodes.Grouping):
         return self.evaluate(expression.expression)
 
     @staticmethod
@@ -177,13 +176,13 @@ class Interpreter:
 
         return obj1 == obj2
 
-    def evaluate(self, expression: expr.Expr):
+    def evaluate(self, expression: nodes.Expr):
         return expression.accept(self)
 
-    def execute(self, statement: stmt.Stmt):
+    def execute(self, statement: nodes.Stmt):
         statement.accept(self)
 
-    def resolve(self, expression: expr.Expr, depth: int):
+    def resolve(self, expression: nodes.Expr, depth: int):
         self.locals[expression] = depth
 
     def execute_block(self, statements, environment):
@@ -195,10 +194,10 @@ class Interpreter:
         finally:
             self.env = enclosing
 
-    def visit_block_stmt(self, stmt: stmt.Block):
+    def visit_block_stmt(self, stmt: nodes.Block):
         self.execute_block(stmt.statements, Environment(self.env))
 
-    def visit_class_stmt(self, stmt: stmt.Class):
+    def visit_class_stmt(self, stmt: nodes.Class):
         superclass = None
         if stmt.superclass is not None:
             superclass = self.evaluate(stmt.superclass)
@@ -225,40 +224,40 @@ class Interpreter:
 
         self.env.assign(stmt.name, cls)
 
-    def visit_expression_stmt(self, stmt: stmt.Expression) -> None:
+    def visit_expression_stmt(self, stmt: nodes.Expression) -> None:
         self.evaluate(stmt.expression)
 
-    def visit_function_stmt(self, stmt: stmt.Function) -> None:
+    def visit_function_stmt(self, stmt: nodes.Function) -> None:
         function = LoxFunction(stmt, self.env, False)
         self.env.define(stmt.name.lexeme, function)
 
-    def visit_if_stmt(self, stmt: stmt.If) -> None:
+    def visit_if_stmt(self, stmt: nodes.If) -> None:
         if self.is_truthy(self.evaluate(stmt.condition)):
             self.execute(stmt.then_branch)
         elif stmt.else_branch is not None:
             self.execute(stmt.else_branch)
 
-    def visit_print_stmt(self, stmt: stmt.Print) -> None:
+    def visit_print_stmt(self, stmt: nodes.Print) -> None:
         value = self.evaluate(stmt.expression)
         print(self.stringify(value))
 
-    def visit_return_stmt(self, stmt: stmt.Return) -> None:
+    def visit_return_stmt(self, stmt: nodes.Return) -> None:
         if (value := stmt.value) is not None:
             value = self.evaluate(stmt.value)
 
         raise Return(value)
 
-    def visit_var_stmt(self, stmt: stmt.Var) -> None:
+    def visit_var_stmt(self, stmt: nodes.Var) -> None:
         value = None
         if stmt.initializer is not None:
             value = self.evaluate(stmt.initializer)
         self.env.define(stmt.name.lexeme, value)
 
-    def visit_while_stmt(self, stmt: stmt.While):
+    def visit_while_stmt(self, stmt: nodes.While):
         while self.is_truthy(self.evaluate(stmt.condition)):
             self.execute(stmt.body)
 
-    def visit_assign_expr(self, expression: expr.Assign):
+    def visit_assign_expr(self, expression: nodes.Assign):
         value = self.evaluate(expression.value)
         distance = self.locals.get(expression)
         if distance is not None:
@@ -268,7 +267,7 @@ class Interpreter:
 
         return value
 
-    def interpret(self, *statements: stmt.Stmt):
+    def interpret(self, *statements: nodes.Stmt):
         for statement in statements:
             self.execute(statement)
 

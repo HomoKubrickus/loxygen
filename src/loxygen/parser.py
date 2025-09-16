@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from loxygen import expr
-from loxygen import stmt
+from loxygen import nodes
 from loxygen.exceptions import LoxParseError
 from loxygen.token import Token
 from loxygen.token import TokenType
@@ -22,7 +21,7 @@ class Parser:
 
         return statements
 
-    def expression(self) -> expr.Expr:
+    def expression(self) -> nodes.Expr:
         return self.assignment()
 
     def declaration(self):
@@ -44,7 +43,7 @@ class Parser:
         superclass = None
         if self.match(TokenType.LESS):
             self.consume(TokenType.IDENTIFIER, "Expect superclass name.")
-            superclass = expr.Variable(self.previous())
+            superclass = nodes.Variable(self.previous())
 
         self.consume(TokenType.LEFT_BRACE, "Expect '{' before class body.")
 
@@ -54,7 +53,7 @@ class Parser:
 
         self.consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.")
 
-        return stmt.Class(name, superclass, methods)
+        return nodes.Class(name, superclass, methods)
 
     def statement(self):
         if self.match(TokenType.FOR):
@@ -68,7 +67,7 @@ class Parser:
         if self.match(TokenType.WHILE):
             return self.while_statement()
         if self.match(TokenType.LEFT_BRACE):
-            return stmt.Block(self.block())
+            return nodes.Block(self.block())
 
         return self.expression_statement()
 
@@ -91,14 +90,14 @@ class Parser:
         body = self.statement()
 
         if increment is not None:
-            body = stmt.Block([body, increment])
+            body = nodes.Block([body, increment])
 
         if condition is None:
-            condition = expr.Literal(True)
-        body = stmt.While(condition, body)
+            condition = nodes.Literal(True)
+        body = nodes.While(condition, body)
 
         if initializer is not None:
-            body = stmt.Block([initializer, body])
+            body = nodes.Block([initializer, body])
 
         return body
 
@@ -110,20 +109,20 @@ class Parser:
         then_branch = self.statement()
         else_branch = self.statement() if self.match(TokenType.ELSE) else None
 
-        return stmt.If(condition, then_branch, else_branch)
+        return nodes.If(condition, then_branch, else_branch)
 
     def print_statement(self):
         value = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after value.")
 
-        return stmt.Print(value)
+        return nodes.Print(value)
 
     def return_statement(self):
         keyword = self.previous()
         value = None if self.check(TokenType.SEMICOLON) else self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after return value.")
 
-        return stmt.Return(keyword, value)
+        return nodes.Return(keyword, value)
 
     def var_declaration(self):
         name = self.consume(TokenType.IDENTIFIER, "Expect variable name.")
@@ -133,7 +132,7 @@ class Parser:
             initializer = self.expression()
 
         self.consume(TokenType.SEMICOLON, "Expect ';' after expression.")
-        return stmt.Var(name, initializer)
+        return nodes.Var(name, initializer)
 
     def while_statement(self):
         self.consume(TokenType.LEFT_PAREN, "Expect '(' after if.")
@@ -142,15 +141,15 @@ class Parser:
 
         body = self.statement()
 
-        return stmt.While(condition, body)
+        return nodes.While(condition, body)
 
     def expression_statement(self):
         expression = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after expression.")
 
-        return stmt.Expression(expression)
+        return nodes.Expression(expression)
 
-    def function(self, kind: str) -> stmt.Function:
+    def function(self, kind: str) -> nodes.Function:
         name = self.consume(TokenType.IDENTIFIER, f"Expect {kind} name.")
         self.consume(TokenType.LEFT_PAREN, f"Expect '(' after {kind} name.")
         parameters: list[Token] = []
@@ -172,7 +171,7 @@ class Parser:
         self.consume(TokenType.LEFT_BRACE, f"Expect '{{' before {kind} body.")
         body = self.block()
 
-        return stmt.Function(name, parameters, body)
+        return nodes.Function(name, parameters, body)
 
     def block(self):
         statements = []
@@ -182,46 +181,46 @@ class Parser:
         self.consume(TokenType.RIGHT_BRACE, "Expect '}' after expression.")
         return statements
 
-    def assignment(self) -> expr.Expr:
+    def assignment(self) -> nodes.Expr:
         expression = self.logical_or()
         if self.match(TokenType.EQUAL):
             equals = self.previous()
             value = self.assignment()
-            if isinstance(expression, expr.Variable):
-                return expr.Assign(expression.name, value)
-            elif isinstance(expression, expr.Get):
-                return expr.Set(expression.object, expression.name, value)
+            if isinstance(expression, nodes.Variable):
+                return nodes.Assign(expression.name, value)
+            elif isinstance(expression, nodes.Get):
+                return nodes.Set(expression.object, expression.name, value)
             self.error(equals, "Invalid assignment target.")
         return expression
 
-    def logical_or(self) -> expr.Expr:
+    def logical_or(self) -> nodes.Expr:
         expression = self.logical_and()
         while self.match(TokenType.OR):
             operator = self.previous()
             right = self.logical_and()
-            expression = expr.Logical(expression, operator, right)
+            expression = nodes.Logical(expression, operator, right)
 
         return expression
 
-    def logical_and(self) -> expr.Expr:
+    def logical_and(self) -> nodes.Expr:
         expression = self.equality()
         while self.match(TokenType.AND):
             operator = self.previous()
             right = self.equality()
-            expression = expr.Logical(expression, operator, right)
+            expression = nodes.Logical(expression, operator, right)
 
         return expression
 
-    def equality(self) -> expr.Expr:
+    def equality(self) -> nodes.Expr:
         expression = self.comparison()
         while self.match(TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL):
             operator = self.previous()
             right = self.comparison()
-            expression = expr.Binary(expression, operator, right)
+            expression = nodes.Binary(expression, operator, right)
 
         return expression
 
-    def comparison(self) -> expr.Expr:
+    def comparison(self) -> nodes.Expr:
         expression = self.term()
         while self.match(
             TokenType.GREATER,
@@ -231,38 +230,38 @@ class Parser:
         ):
             operator = self.previous()
             right = self.term()
-            expression = expr.Binary(expression, operator, right)
+            expression = nodes.Binary(expression, operator, right)
 
         return expression
 
-    def term(self) -> expr.Expr:
+    def term(self) -> nodes.Expr:
         expression = self.factor()
         while self.match(TokenType.MINUS, TokenType.PLUS):
             operator = self.previous()
             right = self.factor()
-            expression = expr.Binary(expression, operator, right)
+            expression = nodes.Binary(expression, operator, right)
 
         return expression
 
-    def factor(self) -> expr.Expr:
+    def factor(self) -> nodes.Expr:
         expression = self.unary()
         while self.match(TokenType.SLASH, TokenType.STAR):
             operator = self.previous()
             right = self.unary()
-            expression = expr.Binary(expression, operator, right)
+            expression = nodes.Binary(expression, operator, right)
 
         return expression
 
-    def unary(self) -> expr.Expr:
+    def unary(self) -> nodes.Expr:
         if self.match(TokenType.BANG, TokenType.MINUS):
             operator = self.previous()
             right = self.unary()
-            return expr.Unary(operator, right)
+            return nodes.Unary(operator, right)
 
         return self.call()
 
-    def finish_call(self, callee) -> expr.Expr:
-        arguments: list[expr.Expr] = []
+    def finish_call(self, callee) -> nodes.Expr:
+        arguments: list[nodes.Expr] = []
         if not self.check(TokenType.RIGHT_PAREN):
             while True:
                 if len(arguments) >= MAXIMUM_ARGS_NUMBER:
@@ -276,9 +275,9 @@ class Parser:
 
         paren = self.consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.")
 
-        return expr.Call(callee, paren, arguments)
+        return nodes.Call(callee, paren, arguments)
 
-    def call(self) -> expr.Expr:
+    def call(self) -> nodes.Expr:
         expression = self.primary()
         while True:
             if self.match(TokenType.LEFT_PAREN):
@@ -288,34 +287,34 @@ class Parser:
                     TokenType.IDENTIFIER,
                     "Expect property name after '.'.",
                 )
-                expression = expr.Get(expression, name)
+                expression = nodes.Get(expression, name)
             else:
                 break
 
         return expression
 
-    def primary(self) -> expr.Expr:
+    def primary(self) -> nodes.Expr:
         if self.match(TokenType.TRUE):
-            return expr.Literal(True)
+            return nodes.Literal(True)
         if self.match(TokenType.FALSE):
-            return expr.Literal(False)
+            return nodes.Literal(False)
         if self.match(TokenType.NIL):
-            return expr.Literal(None)
+            return nodes.Literal(None)
         if self.match(TokenType.NUMBER, TokenType.STRING):
-            return expr.Literal(self.previous().literal)
+            return nodes.Literal(self.previous().literal)
         if self.match(TokenType.THIS):
-            return expr.This(self.previous())
+            return nodes.This(self.previous())
         if self.match(TokenType.IDENTIFIER):
-            return expr.Variable(self.previous())
+            return nodes.Variable(self.previous())
         if self.match(TokenType.SUPER):
             keyword = self.previous()
             self.consume(TokenType.DOT, "Expect '.' after 'super'.")
             method = self.consume(TokenType.IDENTIFIER, "Expect superclass method name.")
-            return expr.Super(keyword, method)
+            return nodes.Super(keyword, method)
         if self.match(TokenType.LEFT_PAREN):
             expression = self.expression()
             self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.")
-            return expr.Grouping(expression)
+            return nodes.Grouping(expression)
 
         raise self.error(self.peek(), "Expect expression.")
 

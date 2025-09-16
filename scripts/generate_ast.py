@@ -122,36 +122,26 @@ def format_file(text: str, formatter: str) -> str:
     return process.stdout
 
 
-def generate_all_nodes(
-    base_class: str, package_name: str, subclass_defs: SubclassMap
-) -> Iterator[str]:
-    yield "from dataclasses import dataclass"
-    if base_class == "Stmt":
-        yield f"from {package_name}.expr import Expr"
-        yield f"from {package_name}.expr import Variable"
-    yield f"from {package_name}.token import Token"
-
-    yield from NodeGenerator(base_class).generate_class()
-
-    for class_name, attrs in subclass_defs.items():
-        yield from NodeGenerator(class_name, base_class, attrs).generate_class()
+def generate_all_nodes(package_name: str, node_defs: NodeDefinitions) -> Iterator[str]:
+    imports = (
+        "from dataclasses import dataclass",
+        f"from {package_name}.token import Token",
+    )
+    yield from imports
+    for base_class, subclass_defs in node_defs.items():
+        yield from NodeGenerator(base_class).generate_class()
+        for class_name, attrs in subclass_defs.items():
+            yield from NodeGenerator(class_name, base_class, attrs).generate_class()
 
 
-def generate_nodes_file(
-    base_class: str, package_name: str, subclass_defs: SubclassMap, formatter: str, filename: Path
-) -> None:
-    lines = generate_all_nodes(base_class, package_name, subclass_defs)
+def generate_nodes_file(package_name: str, node_defs: NodeDefinitions, formatter: str) -> None:
+    lines = generate_all_nodes(package_name, node_defs)
     text = format_file("\n".join(lines), formatter)
+    root = Path(__file__).parent.parent.resolve()
+    filename = root / "src" / package_name / "nodes.py"
     filename.write_text(text)
     print(f"File saved to {filename}")
 
 
-def main(node_defs: NodeDefinitions, package_name: str, formatter: str) -> None:
-    for base_class, nodes_dict in node_defs.items():
-        root = Path(__file__).parent.parent.resolve()
-        filename = root / "src" / package_name / f"{base_class.lower()}.py"
-        generate_nodes_file(base_class, package_name, nodes_dict, formatter, filename)
-
-
 if __name__ == "__main__":
-    main(NODE_DEFS, PACKAGE_NAME, FORMATTER)
+    generate_nodes_file(PACKAGE_NAME, NODE_DEFS, FORMATTER)

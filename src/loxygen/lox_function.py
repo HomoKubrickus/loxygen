@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from loxygen import stmt
+from loxygen import nodes
 from loxygen.environment import Environment
 from loxygen.lox_callable import Callable
 from loxygen.returner import Return
@@ -9,7 +9,7 @@ from loxygen.returner import Return
 class LoxFunction(Callable):
     def __init__(
         self,
-        declaration: stmt.Function,
+        declaration: nodes.Function,
         closure: Environment,
         is_initializer: bool,
     ):
