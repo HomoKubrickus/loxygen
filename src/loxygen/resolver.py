@@ -22,7 +22,7 @@ class ClassType(Enum):
     SUBCLASS = auto()
 
 
-class Resolver:
+class Resolver(nodes.Visitor):
     def __init__(self, interpreter: Interpreter):
         self.interpreter = interpreter
         self.scopes: list[dict] = []

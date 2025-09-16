@@ -1,13 +1,107 @@
 from __future__ import annotations
 
+from abc import ABC
+from abc import abstractmethod
 from dataclasses import dataclass
 
 from loxygen.token import Token
 
 
+class Visitor(ABC):
+    @abstractmethod
+    def visit_assign_expr(self, expr: Assign):
+        pass
+
+    @abstractmethod
+    def visit_binary_expr(self, expr: Binary):
+        pass
+
+    @abstractmethod
+    def visit_call_expr(self, expr: Call):
+        pass
+
+    @abstractmethod
+    def visit_get_expr(self, expr: Get):
+        pass
+
+    @abstractmethod
+    def visit_grouping_expr(self, expr: Grouping):
+        pass
+
+    @abstractmethod
+    def visit_literal_expr(self, expr: Literal):
+        pass
+
+    @abstractmethod
+    def visit_logical_expr(self, expr: Logical):
+        pass
+
+    @abstractmethod
+    def visit_set_expr(self, expr: Set):
+        pass
+
+    @abstractmethod
+    def visit_super_expr(self, expr: Super):
+        pass
+
+    @abstractmethod
+    def visit_this_expr(self, expr: This):
+        pass
+
+    @abstractmethod
+    def visit_unary_expr(self, expr: Unary):
+        pass
+
+    @abstractmethod
+    def visit_variable_expr(self, expr: Variable):
+        pass
+
+    @abstractmethod
+    def visit_block_stmt(self, stmt: Block):
+        pass
+
+    @abstractmethod
+    def visit_expression_stmt(self, stmt: Expression):
+        pass
+
+    @abstractmethod
+    def visit_function_stmt(self, stmt: Function):
+        pass
+
+    @abstractmethod
+    def visit_class_stmt(self, stmt: Class):
+        pass
+
+    @abstractmethod
+    def visit_if_stmt(self, stmt: If):
+        pass
+
+    @abstractmethod
+    def visit_print_stmt(self, stmt: Print):
+        pass
+
+    @abstractmethod
+    def visit_return_stmt(self, stmt: Return):
+        pass
+
+    @abstractmethod
+    def visit_var_stmt(self, stmt: Var):
+        pass
+
+    @abstractmethod
+    def visit_while_stmt(self, stmt: While):
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class Expr:
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class Stmt:
+    def accept(self, visitor: Visitor):
         pass
 
 
@@ -16,7 +110,7 @@ class Assign(Expr):
     name: Token
     value: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_assign_expr(self)
 
 
@@ -26,7 +120,7 @@ class Binary(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_binary_expr(self)
 
 
@@ -36,7 +130,7 @@ class Call(Expr):
     paren: Token
     arguments: list[Expr]
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_call_expr(self)
 
 
@@ -45,7 +139,7 @@ class Get(Expr):
     object: Expr
     name: Token
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_get_expr(self)
 
 
@@ -53,7 +147,7 @@ class Get(Expr):
 class Grouping(Expr):
     expression: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_grouping_expr(self)
 
 
@@ -61,7 +155,7 @@ class Grouping(Expr):
 class Literal(Expr):
     value: object
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_literal_expr(self)
 
 
@@ -71,7 +165,7 @@ class Logical(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_logical_expr(self)
 
 
@@ -81,7 +175,7 @@ class Set(Expr):
     name: Token
     value: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_set_expr(self)
 
 
@@ -90,7 +184,7 @@ class Super(Expr):
     keyword: Token
     method: Token
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_super_expr(self)
 
 
@@ -98,7 +192,7 @@ class Super(Expr):
 class This(Expr):
     keyword: Token
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_this_expr(self)
 
 
@@ -107,7 +201,7 @@ class Unary(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_unary_expr(self)
 
 
@@ -115,21 +209,15 @@ class Unary(Expr):
 class Variable(Expr):
     name: Token
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_variable_expr(self)
-
-
-@dataclass(frozen=True, slots=True)
-class Stmt:
-    def accept(self, visitor):
-        pass
 
 
 @dataclass(frozen=True, slots=True)
 class Block(Stmt):
     statements: list[Stmt]
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_block_stmt(self)
 
 
@@ -137,7 +225,7 @@ class Block(Stmt):
 class Expression(Stmt):
     expression: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_expression_stmt(self)
 
 
@@ -147,7 +235,7 @@ class Function(Stmt):
     params: list[Token]
     body: list[Stmt]
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_function_stmt(self)
 
 
@@ -157,7 +245,7 @@ class Class(Stmt):
     superclass: Variable
     methods: list[Function]
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_class_stmt(self)
 
 
@@ -167,7 +255,7 @@ class If(Stmt):
     then_branch: Stmt
     else_branch: Stmt
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_if_stmt(self)
 
 
@@ -175,7 +263,7 @@ class If(Stmt):
 class Print(Stmt):
     expression: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_print_stmt(self)
 
 
@@ -184,7 +272,7 @@ class Return(Stmt):
     keyword: Token
     value: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_return_stmt(self)
 
 
@@ -193,7 +281,7 @@ class Var(Stmt):
     name: Token
     initializer: Expr
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_var_stmt(self)
 
 
@@ -202,5 +290,5 @@ class While(Stmt):
     condition: Expr
     body: Stmt
 
-    def accept(self, visitor):
+    def accept(self, visitor: Visitor):
         return visitor.visit_while_stmt(self)

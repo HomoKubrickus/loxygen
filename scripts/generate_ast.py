@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Iterator
+from itertools import chain
 from pathlib import Path
 from shutil import which
 
@@ -12,7 +13,6 @@ type NodeDefinitions = dict[str, SubclassMap]
 
 
 PACKAGE_NAME = "loxygen"
-FORMATTER = "ruff"
 INDENT = 4
 
 
@@ -53,40 +53,65 @@ NODE_DEFS: NodeDefinitions = {
 }
 
 
-class NodeGenerator:
-    def __init__(
-        self,
-        class_name: str,
-        base_class: str | None = None,
-        attrs: FieldList = (),
-        indent: int = INDENT,
-    ):
-        self.class_name = class_name
-        self.base_class = base_class
-        self.attrs = attrs
+class CodeGenerator:
+    def __init__(self, indent: int = INDENT):
         self.indent = " " * indent
 
     def format_line(self, text, level):
         return self.indent * level + text
 
+
+class BaseNodeGenerator(CodeGenerator):
+    def __init__(
+        self,
+        class_name: str,
+        indent: int = INDENT,
+    ):
+        super().__init__(indent)
+        self.class_name = class_name
+
     def generate_class_declaration(self):
         yield self.format_line("@dataclass(frozen=True, slots=True)", 0)
-        cls = f"class {self.class_name}"
-        cls += ":" if self.base_class is None else f"({self.base_class}):"
-        yield self.format_line(cls, 0)
+        yield self.format_line(f"class {self.class_name}:", 0)
+
+    def generate_accept_method(self):
+        yield self.format_line("def accept(self, visitor: Visitor):", 1)
+        yield self.format_line("pass", 2)
+
+    def generate_class(self):
+        yield from self.generate_class_declaration()
+        yield from self.generate_accept_method()
+
+
+class ConcreteNodeGenerator(CodeGenerator):
+    def __init__(
+        self,
+        class_name: str,
+        base_class: str,
+        attrs: FieldList,
+        indent: int = INDENT,
+    ):
+        super().__init__(indent)
+        self.class_name = class_name
+        self.base_class = base_class
+        self.attrs = attrs
+
+    def generate_class_declaration(self):
+        decorator = "@dataclass(frozen=True, slots=True)"
+        yield self.format_line(decorator, 0)
+        declaration = f"class {self.class_name}({self.base_class}):"
+        yield self.format_line(declaration, 0)
 
     def generate_attrs(self):
         for attr, annotation in self.attrs:
             yield self.format_line(f"{attr}:{annotation}", 1)
 
     def generate_accept_method(self):
-        yield self.format_line("def accept(self, visitor):", 1)
-        body = (
-            "pass"
-            if self.base_class is None
-            else f"return visitor.visit_{self.class_name.lower()}_{self.base_class.lower()}(self)"
-        )
-        yield self.format_line(body, 2)
+        declaration = "def accept(self, visitor: Visitor):"
+        yield self.format_line(declaration, 1)
+        method_name = f"visit_{self.class_name.lower()}_{self.base_class.lower()}"
+        return_stmt = f"return visitor.{method_name}(self)"
+        yield self.format_line(return_stmt, 2)
 
     def generate_class(self):
         yield from self.generate_class_declaration()
@@ -94,22 +119,32 @@ class NodeGenerator:
         yield from self.generate_accept_method()
 
 
-def format_file(text: str, formatter: str) -> str:
-    if formatter not in ("black", "ruff"):
-        print("Formatter must be 'black' or 'ruff'. Code will not be formatted.", file=sys.stderr)
-        return text
+class VisitorGenerator(CodeGenerator):
+    def generate_class_declaration(self):
+        cls = "class Visitor(ABC):"
+        yield self.format_line(cls, 0)
 
-    if (formatter_path := which(formatter)) is None:
-        print(f"'{formatter}' is not installed. Code will not be formatted.", file=sys.stderr)
-        return text
+    def generate_visit_method(self, node: str, node_base_class: str):
+        yield self.format_line("@abstractmethod", 1)
+        method_name = f"visit_{node.lower()}_{node_base_class.lower()}"
+        params = f"self, {node_base_class.lower()}: {node}"
+        yield self.format_line(f"def {method_name}({params}):", 1)
+        yield self.format_line("pass", 2)
 
-    if formatter == "ruff":
-        cmd = [formatter_path, "format", "-"]
-    if formatter == "black":
-        cmd = [formatter_path, "-"]
+    def generate_class(self, node_defs: NodeDefinitions):
+        yield from self.generate_class_declaration()
+        for node_base_class, subclass_defs in node_defs.items():
+            for class_name in subclass_defs:
+                yield from self.generate_visit_method(class_name, node_base_class)
+
+
+def format_file(text: str) -> str:
+    if (ruff_path := which("ruff")) is None:
+        print("'ruff' is not installed. Code will not be formatted.", file=sys.stderr)
+        return text
 
     process = subprocess.run(
-        cmd,
+        [ruff_path, "format", "-"],
         input=text,
         capture_output=True,
         text=True,
@@ -124,19 +159,28 @@ def format_file(text: str, formatter: str) -> str:
 
 def generate_all_nodes(package_name: str, node_defs: NodeDefinitions) -> Iterator[str]:
     imports = (
+        "from __future__ import annotations",
+        "from abc import ABC",
+        "from abc import abstractmethod",
         "from dataclasses import dataclass",
         f"from {package_name}.token import Token",
     )
-    yield from imports
-    for base_class, subclass_defs in node_defs.items():
-        yield from NodeGenerator(base_class).generate_class()
-        for class_name, attrs in subclass_defs.items():
-            yield from NodeGenerator(class_name, base_class, attrs).generate_class()
+    visitor = VisitorGenerator().generate_class(node_defs)
+    base_nodes = chain.from_iterable(
+        BaseNodeGenerator(base_class).generate_class() for base_class in node_defs
+    )
+    concrete_nodes = chain.from_iterable(
+        ConcreteNodeGenerator(class_name, base_class, attrs).generate_class()
+        for base_class, subclass_defs in node_defs.items()
+        for class_name, attrs in subclass_defs.items()
+    )
+
+    yield from chain(imports, visitor, base_nodes, concrete_nodes)
 
 
-def generate_nodes_file(package_name: str, node_defs: NodeDefinitions, formatter: str) -> None:
+def generate_nodes_file(package_name: str, node_defs: NodeDefinitions) -> None:
     lines = generate_all_nodes(package_name, node_defs)
-    text = format_file("\n".join(lines), formatter)
+    text = format_file("\n".join(lines))
     root = Path(__file__).parent.parent.resolve()
     filename = root / "src" / package_name / "nodes.py"
     filename.write_text(text)
@@ -144,4 +188,4 @@ def generate_nodes_file(package_name: str, node_defs: NodeDefinitions, formatter
 
 
 if __name__ == "__main__":
-    generate_nodes_file(PACKAGE_NAME, NODE_DEFS, FORMATTER)
+    generate_nodes_file(PACKAGE_NAME, NODE_DEFS)

@@ -13,7 +13,7 @@ from loxygen.token import Token
 from loxygen.token import TokenType
 
 
-class Interpreter:
+class Interpreter(nodes.Visitor):
     def __init__(self):
         self.globals = Environment()
         self.globals.define("clock", Clock())
