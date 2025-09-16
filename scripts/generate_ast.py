@@ -129,7 +129,7 @@ def generate_all_nodes(
     if base_class == "Stmt":
         yield f"from {package_name}.expr import Expr"
         yield f"from {package_name}.expr import Variable"
-    yield f"from {package_name}.lox_token import Token"
+    yield f"from {package_name}.token import Token"
 
     yield from NodeGenerator(base_class).generate_class()
 

@@ -9,9 +9,9 @@ from loxygen.lox_callable import Clock
 from loxygen.lox_class import LoxClass
 from loxygen.lox_function import LoxFunction
 from loxygen.lox_instance import LoxInstance
-from loxygen.lox_token import Token
 from loxygen.returner import Return
-from loxygen.tokens import TokenType
+from loxygen.token import Token
+from loxygen.token import TokenType
 
 
 class Interpreter:

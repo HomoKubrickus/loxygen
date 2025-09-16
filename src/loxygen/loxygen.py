@@ -7,11 +7,11 @@ from os import EX_USAGE
 from contract.contract import LoxStatus
 from loxygen.exceptions import LoxRunTimeError
 from loxygen.interpreter import Interpreter
-from loxygen.lox_token import Token
 from loxygen.parser import Parser
 from loxygen.resolver import Resolver
 from loxygen.scanner import Scanner
-from loxygen.tokens import TokenType
+from loxygen.token import Token
+from loxygen.token import TokenType
 
 
 class Lox:

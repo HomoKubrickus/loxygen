@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from loxygen.exceptions import LoxRunTimeError
-from loxygen.lox_token import Token
+from loxygen.token import Token
 
 
 class LoxInstance:

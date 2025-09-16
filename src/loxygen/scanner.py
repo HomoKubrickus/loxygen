@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from loxygen.lox_token import Token
-from loxygen.tokens import TokenType
+from loxygen.token import Token
+from loxygen.token import TokenType
 
 IDENTIFIERS = [
     "AND",

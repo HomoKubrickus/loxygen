@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from loxygen.lox_token import Token
+from loxygen.token import Token
 
 
 @dataclass(frozen=True, slots=True)

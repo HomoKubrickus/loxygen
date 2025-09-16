@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from loxygen.expr import Expr
 from loxygen.expr import Variable
-from loxygen.lox_token import Token
+from loxygen.token import Token
 
 
 @dataclass(frozen=True, slots=True)

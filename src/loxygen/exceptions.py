@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from loxygen.lox_token import Token
+from loxygen.token import Token
 
 
 class LoxError(Exception):
     pass
 
 
-class LoxStaticError(LoxError):
-    pass
-
-
-class LoxParseError(LoxStaticError):
+class LoxParseError(LoxError):
     pass
 
 

@@ -7,7 +7,7 @@ from enum import auto
 from loxygen import expr
 from loxygen import stmt
 from loxygen.interpreter import Interpreter
-from loxygen.lox_token import Token
+from loxygen.token import Token
 
 
 class FunctionType(Enum):
