@@ -13,7 +13,7 @@ class ASTPrinter:
         return self.parenthesize(expression.operator.lexeme, expression.left, expression.right)
 
     def visit_grouping_expr(self, expression: nodes.Grouping):
-        return self.parenthesize("group", expression.expression)
+        return self.parenthesize("group", expression.expr)
 
     def visit_literal_expr(self, expression: nodes.Literal):
         if expression.value is None:
@@ -26,12 +26,12 @@ class ASTPrinter:
     def parenthesize(self, name: str, *exprs: nodes.Expr):
         output = f"({name}"
         for expression in exprs:
-            output += f" {expression.accept(self)}"
+            output += f" {expression.accept(self)}"  # type: ignore[arg-type]
         output += ")"
         return output
 
     def print(self, expression: nodes.Expr):
-        return expression.accept(self)
+        return expression.accept(self)  # type: ignore[arg-type]
 
 
 def generate_ast_string(inp: str) -> str:

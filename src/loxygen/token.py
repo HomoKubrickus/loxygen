@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from enum import Enum
 from enum import auto
-from typing import Any
+
+type LiteralValue = float | str | bool | None
 
 
 class TokenType(Enum):
@@ -56,16 +57,16 @@ class TokenType(Enum):
 
 
 class Token:
-    def __init__(self, type: TokenType, lexeme: str, literal: Any, line: int):
+    def __init__(self, type: TokenType, lexeme: str, literal: LiteralValue, line: int):
         self.type = type
         self.lexeme = lexeme
         self.literal = literal
         self.line = line
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.type} {self.lexeme} {self.literal}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"Token(type={self.type.name}, "
             f"lexeme={self.lexeme}, "

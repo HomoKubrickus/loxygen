@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import readline  # noqa: F401
 import sys
+from collections.abc import Iterable
 from os import EX_USAGE
+from pathlib import Path
 
 from contract.contract import LoxStatus
 from loxygen.exceptions import LoxRunTimeError
@@ -15,56 +17,57 @@ from loxygen.token import TokenType
 
 
 class Lox:
-    def __init__(self):
+    def __init__(self) -> None:
         self.interpreter = Interpreter()
 
-    def main(self, args: list[str]):
+    def main(self, args: list[str]) -> None:
         if len(args) > 1:
             print("Usage: loxygen [script]")
             sys.exit(EX_USAGE)
         elif len(args) == 1:
-            self.run_file(args[0])
+            self.run_file(Path(args[0]))
         else:
             self.run_prompt()
 
-    def run_file(self, filename: str):
+    def run_file(self, filename: Path) -> None:
         with open(filename) as f:
             source = f.read()
         status = self.run(source)
         if status != LoxStatus.OK:
             sys.exit(status.value)
 
-    def run_prompt(self):
+    def run_prompt(self) -> None:
         while True:
             line = input(">")
             if line == "":
                 break
             self.run(line)
 
-    def run(self, source: str):
+    def run(self, source: str) -> LoxStatus:
         scanner = Scanner(source)
         scanner.scan_tokens()
         parser = Parser(scanner.tokens)
-        statements = parser.parse()
+        stmts = parser.parse()
 
-        if self.check_error(scanner.errors + parser.errors):
+        errors = (error for producer in (scanner, parser) for error in producer.errors)
+        if self.check_error(errors):
             return LoxStatus.STATIC_ERROR
 
         resolver = Resolver(self.interpreter)
-        resolver.resolve(*statements)
+        resolver.resolve(*stmts)
 
         if self.check_error(resolver.errors):
             return LoxStatus.STATIC_ERROR
 
         try:
-            self.interpreter.interpret(*statements)
+            self.interpreter.interpret(*stmts)
         except LoxRunTimeError as e:
             self.error(e.token.line, e.message)
             return LoxStatus.RUNTIME_ERROR
 
         return LoxStatus.OK
 
-    def check_error(self, errors):
+    def check_error(self, errors: Iterable[tuple[int | Token, str]]) -> bool:
         error = False
         for context, message in errors:
             self.error(context, message)
@@ -75,7 +78,7 @@ class Lox:
         self,
         context: int | Token,
         message: str,
-    ):
+    ) -> None:
         if isinstance(context, int):
             line = context
             token = ""
@@ -87,7 +90,7 @@ class Lox:
         print(f"[line {line}] {token}{message}", file=sys.stderr)
 
 
-def main():
+def main() -> None:
     Lox().main(sys.argv[1:])
 
 

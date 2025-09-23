@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from loxygen.token import LiteralValue
 from loxygen.token import Token
 from loxygen.token import TokenType
 
@@ -24,7 +25,7 @@ IDENTIFIERS = [
 
 
 class Scanner:
-    def __init__(self, source: str):
+    def __init__(self, source: str) -> None:
         self.source = source
         self.tokens: list[Token] = []
 
@@ -40,14 +41,14 @@ class Scanner:
 
         self.errors: list[tuple[int, str]] = []
 
-    def scan_tokens(self):
+    def scan_tokens(self) -> None:
         while not self.is_at_end():
             self.start = self.current
             self.scan_token()
 
         self.tokens.append(Token(TokenType.EOF, "", None, self.line))
 
-    def scan_token(self):
+    def scan_token(self) -> None:
         char = self.advance()
         match char:
             case "(":
@@ -106,7 +107,7 @@ class Scanner:
                 else:
                     self.errors.append((self.line, "Error: Unexpected character."))
 
-    def identifier(self):
+    def identifier(self) -> None:
         while self.is_alphanumeric(self.peek()):
             self.advance()
         text = self.source[self.start : self.current]
@@ -115,7 +116,7 @@ class Scanner:
             token_type = TokenType.IDENTIFIER
         self.add_token(token_type)
 
-    def number(self):
+    def number(self) -> None:
         while self.is_digit(self.peek()):
             self.advance()
         if self.peek() == "." and self.is_digit(self.peek_next()):
@@ -124,7 +125,7 @@ class Scanner:
                 self.advance()
         self.add_token(TokenType.NUMBER, float(self.source[self.start : self.current]))
 
-    def string(self):
+    def string(self) -> None:
         while self.peek() != '"' and not self.is_at_end():
             if self.peek() == "\n":
                 self.line += 1
@@ -138,41 +139,41 @@ class Scanner:
         value = self.source[self.start + 1 : self.current - 1]
         self.add_token(TokenType.STRING, value)
 
-    def match(self, expected: str):
+    def match(self, expected: str) -> bool:
         if self.is_at_end() or self.source[self.current] != expected:
             return False
         self.current += 1
         return True
 
-    def peek(self):
+    def peek(self) -> str:
         if self.is_at_end():
             return ""
         return self.source[self.current]
 
-    def peek_next(self):
+    def peek_next(self) -> str:
         if self.current + 1 >= len(self.source):
             return ""
         return self.source[self.current + 1]
 
     @staticmethod
-    def is_alpha(char: str):
+    def is_alpha(char: str) -> bool:
         return (char >= "a" and char <= "z") or (char >= "A" and char <= "Z") or char == "_"
 
     @staticmethod
-    def is_digit(char: str):
+    def is_digit(char: str) -> bool:
         return char >= "0" and char <= "9"
 
-    def is_alphanumeric(self, char: str):
+    def is_alphanumeric(self, char: str) -> bool:
         return self.is_alpha(char) or self.is_digit(char)
 
-    def is_at_end(self):
+    def is_at_end(self) -> bool:
         return self.current >= len(self.source)
 
-    def advance(self):
+    def advance(self) -> str:
         char = self.source[self.current]
         self.current += 1
         return char
 
-    def add_token(self, type: TokenType, literal=None):
+    def add_token(self, type: TokenType, literal: LiteralValue = None) -> None:
         text = self.source[self.start : self.current]
         self.tokens.append(Token(type, text, literal, self.line))

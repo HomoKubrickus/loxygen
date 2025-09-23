@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
 from enum import auto
@@ -25,28 +26,28 @@ class ClassType(Enum):
 class Resolver(nodes.Visitor):
     def __init__(self, interpreter: Interpreter):
         self.interpreter = interpreter
-        self.scopes: list[dict] = []
+        self.scopes: list[dict[str, bool]] = []
         self.current_function = FunctionType.NONE
         self.current_class = ClassType.NONE
         self.errors: list[tuple[Token, str]] = []
 
     @property
-    def current_scope(self):
+    def current_scope(self) -> dict[str, bool]:
         return self.scopes[-1]
 
-    def resolve(self, *statements: nodes.Expr | nodes.Stmt):
+    def resolve(self, *statements: nodes.Expr | nodes.Stmt) -> None:
         for statement in statements:
             statement.accept(self)
 
     @contextmanager
-    def scope(self):
+    def scope(self) -> Iterator[None]:
         try:
             self.scopes.append({})
             yield
         finally:
             self.scopes.pop()
 
-    def declare(self, name: Token):
+    def declare(self, name: Token) -> None:
         if self.scopes:
             if name.lexeme in self.current_scope:
                 self.errors.append(
@@ -57,17 +58,17 @@ class Resolver(nodes.Visitor):
                 )
             self.current_scope[name.lexeme] = False
 
-    def define(self, name: Token):
+    def define(self, name: Token) -> None:
         if self.scopes:
             self.current_scope[name.lexeme] = True
 
-    def resolve_local(self, expression: nodes.Expr, name: Token):
+    def resolve_local(self, expr: nodes.Expr, name: Token) -> None:
         for idx, scope in enumerate(reversed(self.scopes)):
             if name.lexeme in scope:
-                self.interpreter.resolve(expression, idx)
+                self.interpreter.resolve(expr, idx)
                 break
 
-    def resolve_function(self, function: nodes.Function, function_type: FunctionType):
+    def resolve_function(self, function: nodes.Function, function_type: FunctionType) -> None:
         enclosing_function = self.current_function
         self.current_function = function_type
         with self.scope():
@@ -78,7 +79,7 @@ class Resolver(nodes.Visitor):
 
         self.current_function = enclosing_function
 
-    def resolve_class_body(self, stmt: nodes.Class):
+    def resolve_class_body(self, stmt: nodes.Class) -> None:
         with self.scope():
             self.current_scope["this"] = True
             for method in stmt.methods:
@@ -87,11 +88,11 @@ class Resolver(nodes.Visitor):
                     declaration = FunctionType.INITIALIZER
                 self.resolve_function(method, declaration)
 
-    def visit_block_stmt(self, stmt: nodes.Block):
+    def visit_block_stmt(self, stmt: nodes.Block) -> None:
         with self.scope():
             self.resolve(*stmt.statements)
 
-    def visit_class_stmt(self, stmt: nodes.Class):
+    def visit_class_stmt(self, stmt: nodes.Class) -> None:
         enclosing_class = self.current_class
         self.current_class = ClassType.CLASS
 
@@ -118,25 +119,25 @@ class Resolver(nodes.Visitor):
 
         self.current_class = enclosing_class
 
-    def visit_expression_stmt(self, stmt: nodes.Expression):
-        self.resolve(stmt.expression)
+    def visit_expression_stmt(self, stmt: nodes.Expression) -> None:
+        self.resolve(stmt.expr)
 
-    def visit_function_stmt(self, stmt: nodes.Function):
+    def visit_function_stmt(self, stmt: nodes.Function) -> None:
         self.declare(stmt.name)
         self.define(stmt.name)
 
         self.resolve_function(stmt, FunctionType.FUNCTION)
 
-    def visit_if_stmt(self, stmt: nodes.If):
+    def visit_if_stmt(self, stmt: nodes.If) -> None:
         self.resolve(stmt.condition)
         self.resolve(stmt.then_branch)
         if stmt.else_branch:
             self.resolve(stmt.else_branch)
 
-    def visit_print_stmt(self, stmt: nodes.Print):
-        self.resolve(stmt.expression)
+    def visit_print_stmt(self, stmt: nodes.Print) -> None:
+        self.resolve(stmt.expr)
 
-    def visit_return_stmt(self, stmt: nodes.Return):
+    def visit_return_stmt(self, stmt: nodes.Return) -> None:
         if self.current_function == FunctionType.NONE:
             self.errors.append(
                 (
@@ -154,83 +155,83 @@ class Resolver(nodes.Visitor):
                 )
             self.resolve(stmt.value)
 
-    def visit_var_stmt(self, stmt: nodes.Var):
+    def visit_var_stmt(self, stmt: nodes.Var) -> None:
         self.declare(stmt.name)
         if stmt.initializer is not None:
             self.resolve(stmt.initializer)
         self.define(stmt.name)
 
-    def visit_while_stmt(self, stmt: nodes.While):
+    def visit_while_stmt(self, stmt: nodes.While) -> None:
         self.resolve(stmt.condition)
         self.resolve(stmt.body)
 
-    def visit_assign_expr(self, expression: nodes.Assign):
-        self.resolve(expression.value)
-        self.resolve_local(expression, expression.name)
+    def visit_assign_expr(self, expr: nodes.Assign) -> None:
+        self.resolve(expr.value)
+        self.resolve_local(expr, expr.name)
 
-    def visit_binary_expr(self, expression: nodes.Binary):
-        self.resolve(expression.left)
-        self.resolve(expression.right)
+    def visit_binary_expr(self, expr: nodes.Binary) -> None:
+        self.resolve(expr.left)
+        self.resolve(expr.right)
 
-    def visit_call_expr(self, expression: nodes.Call):
-        self.resolve(expression.callee)
-        for argument in expression.arguments:
+    def visit_call_expr(self, expr: nodes.Call) -> None:
+        self.resolve(expr.callee)
+        for argument in expr.arguments:
             self.resolve(argument)
 
-    def visit_get_expr(self, expression: nodes.Get):
-        self.resolve(expression.object)
+    def visit_get_expr(self, expr: nodes.Get) -> None:
+        self.resolve(expr.object)
 
-    def visit_grouping_expr(self, expression: nodes.Grouping):
-        self.resolve(expression.expression)
+    def visit_grouping_expr(self, expr: nodes.Grouping) -> None:
+        self.resolve(expr.expr)
 
-    def visit_literal_expr(self, expression: nodes.Literal):
+    def visit_literal_expr(self, expr: nodes.Literal) -> None:
         pass
 
-    def visit_logical_expr(self, expression: nodes.Logical):
-        self.resolve(expression.left)
-        self.resolve(expression.right)
+    def visit_logical_expr(self, expr: nodes.Logical) -> None:
+        self.resolve(expr.left)
+        self.resolve(expr.right)
 
-    def visit_set_expr(self, expression: nodes.Set):
-        self.resolve(expression.value)
-        self.resolve(expression.object)
+    def visit_set_expr(self, expr: nodes.Set) -> None:
+        self.resolve(expr.value)
+        self.resolve(expr.object)
 
-    def visit_super_expr(self, expression: nodes.Super):
+    def visit_super_expr(self, expr: nodes.Super) -> None:
         if self.current_class == ClassType.NONE:
             self.errors.append(
                 (
-                    expression.keyword,
+                    expr.keyword,
                     "Can't use 'super' outside of a class.",
                 ),
             )
         elif self.current_class != ClassType.SUBCLASS:
             self.errors.append(
                 (
-                    expression.keyword,
+                    expr.keyword,
                     "Can't use 'super' in a class with no superclass.",
                 ),
             )
 
-        self.resolve_local(expression, expression.keyword)
+        self.resolve_local(expr, expr.keyword)
 
-    def visit_this_expr(self, expression: nodes.This):
+    def visit_this_expr(self, expr: nodes.This) -> None:
         if self.current_class == ClassType.NONE:
             self.errors.append(
                 (
-                    expression.keyword,
+                    expr.keyword,
                     "Can't use 'this' outside of a class.",
                 ),
             )
-        self.resolve_local(expression, expression.keyword)
+        self.resolve_local(expr, expr.keyword)
 
-    def visit_unary_expr(self, expression: nodes.Unary):
-        self.resolve(expression.right)
+    def visit_unary_expr(self, expr: nodes.Unary) -> None:
+        self.resolve(expr.right)
 
-    def visit_variable_expr(self, expression: nodes.Variable):
-        if self.scopes and self.current_scope.get(expression.name.lexeme) is False:
+    def visit_variable_expr(self, expr: nodes.Variable) -> None:
+        if self.scopes and self.current_scope.get(expr.name.lexeme) is False:
             self.errors.append(
                 (
-                    expression.name,
+                    expr.name,
                     "Can't read local variable in its own initializer.",
                 ),
             )
-        self.resolve_local(expression, expression.name)
+        self.resolve_local(expr, expr.name)

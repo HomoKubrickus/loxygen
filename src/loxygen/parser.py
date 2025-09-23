@@ -9,22 +9,22 @@ MAXIMUM_ARGS_NUMBER = 255
 
 
 class Parser:
-    def __init__(self, tokens: list[Token]):
+    def __init__(self, tokens: list[Token]) -> None:
         self.tokens = tokens
         self.current = 0
         self.errors: list[tuple[Token, str]] = []
 
-    def parse(self):
-        statements = []
+    def parse(self) -> list[nodes.Stmt]:
+        statements: list[nodes.Stmt] = []
         while not self.is_at_end():
-            statements.append(self.declaration())
-
+            if (declaration := self.declaration()) is not None:
+                statements.append(declaration)
         return statements
 
     def expression(self) -> nodes.Expr:
         return self.assignment()
 
-    def declaration(self):
+    def declaration(self) -> nodes.Stmt | None:
         try:
             if self.match(TokenType.CLASS):
                 return self.class_declaration()
@@ -37,7 +37,7 @@ class Parser:
             self.synchronize()
             return None
 
-    def class_declaration(self):
+    def class_declaration(self) -> nodes.Class:
         name = self.consume(TokenType.IDENTIFIER, "Expect class name.")
 
         superclass = None
@@ -55,7 +55,7 @@ class Parser:
 
         return nodes.Class(name, superclass, methods)
 
-    def statement(self):
+    def statement(self) -> nodes.Stmt:
         if self.match(TokenType.FOR):
             return self.for_statement()
         if self.match(TokenType.IF):
@@ -71,9 +71,10 @@ class Parser:
 
         return self.expression_statement()
 
-    def for_statement(self):
+    def for_statement(self) -> nodes.Stmt:
         self.consume(TokenType.LEFT_PAREN, "Expect '(' after if.")
 
+        initializer: nodes.Stmt | None
         if self.match(TokenType.SEMICOLON):
             initializer = None
         elif self.match(TokenType.VAR):
@@ -90,7 +91,7 @@ class Parser:
         body = self.statement()
 
         if increment is not None:
-            body = nodes.Block([body, increment])
+            body = nodes.Block([body, nodes.Expression(increment)])
 
         if condition is None:
             condition = nodes.Literal(True)
@@ -101,7 +102,7 @@ class Parser:
 
         return body
 
-    def if_statement(self):
+    def if_statement(self) -> nodes.If:
         self.consume(TokenType.LEFT_PAREN, "Expect '(' after if.")
         condition = self.expression()
         self.consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.")
@@ -111,20 +112,20 @@ class Parser:
 
         return nodes.If(condition, then_branch, else_branch)
 
-    def print_statement(self):
+    def print_statement(self) -> nodes.Print:
         value = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after value.")
 
         return nodes.Print(value)
 
-    def return_statement(self):
+    def return_statement(self) -> nodes.Return:
         keyword = self.previous()
         value = None if self.check(TokenType.SEMICOLON) else self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after return value.")
 
         return nodes.Return(keyword, value)
 
-    def var_declaration(self):
+    def var_declaration(self) -> nodes.Var:
         name = self.consume(TokenType.IDENTIFIER, "Expect variable name.")
 
         initializer = None
@@ -134,7 +135,7 @@ class Parser:
         self.consume(TokenType.SEMICOLON, "Expect ';' after expression.")
         return nodes.Var(name, initializer)
 
-    def while_statement(self):
+    def while_statement(self) -> nodes.While:
         self.consume(TokenType.LEFT_PAREN, "Expect '(' after if.")
         condition = self.expression()
         self.consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.")
@@ -143,11 +144,11 @@ class Parser:
 
         return nodes.While(condition, body)
 
-    def expression_statement(self):
-        expression = self.expression()
+    def expression_statement(self) -> nodes.Expression:
+        expr = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after expression.")
 
-        return nodes.Expression(expression)
+        return nodes.Expression(expr)
 
     def function(self, kind: str) -> nodes.Function:
         name = self.consume(TokenType.IDENTIFIER, f"Expect {kind} name.")
@@ -173,55 +174,57 @@ class Parser:
 
         return nodes.Function(name, parameters, body)
 
-    def block(self):
-        statements = []
+    def block(self) -> list[nodes.Stmt]:
+        statements: list[nodes.Stmt] = []
         while not (self.check(TokenType.RIGHT_BRACE) or self.is_at_end()):
-            statements.append(self.declaration())
+            if (declaration := self.declaration()) is not None:
+                statements.append(declaration)
 
         self.consume(TokenType.RIGHT_BRACE, "Expect '}' after expression.")
+
         return statements
 
     def assignment(self) -> nodes.Expr:
-        expression = self.logical_or()
+        expr = self.logical_or()
         if self.match(TokenType.EQUAL):
             equals = self.previous()
             value = self.assignment()
-            if isinstance(expression, nodes.Variable):
-                return nodes.Assign(expression.name, value)
-            elif isinstance(expression, nodes.Get):
-                return nodes.Set(expression.object, expression.name, value)
+            if isinstance(expr, nodes.Variable):
+                return nodes.Assign(expr.name, value)
+            elif isinstance(expr, nodes.Get):
+                return nodes.Set(expr.object, expr.name, value)
             self.error(equals, "Invalid assignment target.")
-        return expression
+        return expr
 
     def logical_or(self) -> nodes.Expr:
-        expression = self.logical_and()
+        expr = self.logical_and()
         while self.match(TokenType.OR):
             operator = self.previous()
             right = self.logical_and()
-            expression = nodes.Logical(expression, operator, right)
+            expr = nodes.Logical(expr, operator, right)
 
-        return expression
+        return expr
 
     def logical_and(self) -> nodes.Expr:
-        expression = self.equality()
+        expr = self.equality()
         while self.match(TokenType.AND):
             operator = self.previous()
             right = self.equality()
-            expression = nodes.Logical(expression, operator, right)
+            expr = nodes.Logical(expr, operator, right)
 
-        return expression
+        return expr
 
     def equality(self) -> nodes.Expr:
-        expression = self.comparison()
+        expr = self.comparison()
         while self.match(TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL):
             operator = self.previous()
             right = self.comparison()
-            expression = nodes.Binary(expression, operator, right)
+            expr = nodes.Binary(expr, operator, right)
 
-        return expression
+        return expr
 
     def comparison(self) -> nodes.Expr:
-        expression = self.term()
+        expr = self.term()
         while self.match(
             TokenType.GREATER,
             TokenType.GREATER_EQUAL,
@@ -230,27 +233,27 @@ class Parser:
         ):
             operator = self.previous()
             right = self.term()
-            expression = nodes.Binary(expression, operator, right)
+            expr = nodes.Binary(expr, operator, right)
 
-        return expression
+        return expr
 
     def term(self) -> nodes.Expr:
-        expression = self.factor()
+        expr = self.factor()
         while self.match(TokenType.MINUS, TokenType.PLUS):
             operator = self.previous()
             right = self.factor()
-            expression = nodes.Binary(expression, operator, right)
+            expr = nodes.Binary(expr, operator, right)
 
-        return expression
+        return expr
 
     def factor(self) -> nodes.Expr:
-        expression = self.unary()
+        expr = self.unary()
         while self.match(TokenType.SLASH, TokenType.STAR):
             operator = self.previous()
             right = self.unary()
-            expression = nodes.Binary(expression, operator, right)
+            expr = nodes.Binary(expr, operator, right)
 
-        return expression
+        return expr
 
     def unary(self) -> nodes.Expr:
         if self.match(TokenType.BANG, TokenType.MINUS):
@@ -260,7 +263,7 @@ class Parser:
 
         return self.call()
 
-    def finish_call(self, callee) -> nodes.Expr:
+    def finish_call(self, callee: nodes.Expr) -> nodes.Call:
         arguments: list[nodes.Expr] = []
         if not self.check(TokenType.RIGHT_PAREN):
             while True:
@@ -278,20 +281,20 @@ class Parser:
         return nodes.Call(callee, paren, arguments)
 
     def call(self) -> nodes.Expr:
-        expression = self.primary()
+        expr = self.primary()
         while True:
             if self.match(TokenType.LEFT_PAREN):
-                expression = self.finish_call(expression)
+                expr = self.finish_call(expr)
             elif self.match(TokenType.DOT):
                 name = self.consume(
                     TokenType.IDENTIFIER,
                     "Expect property name after '.'.",
                 )
-                expression = nodes.Get(expression, name)
+                expr = nodes.Get(expr, name)
             else:
                 break
 
-        return expression
+        return expr
 
     def primary(self) -> nodes.Expr:
         if self.match(TokenType.TRUE):
@@ -312,9 +315,9 @@ class Parser:
             method = self.consume(TokenType.IDENTIFIER, "Expect superclass method name.")
             return nodes.Super(keyword, method)
         if self.match(TokenType.LEFT_PAREN):
-            expression = self.expression()
+            expr = self.expression()
             self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.")
-            return nodes.Grouping(expression)
+            return nodes.Grouping(expr)
 
         raise self.error(self.peek(), "Expect expression.")
 
@@ -351,10 +354,10 @@ class Parser:
         self.errors.append((token, message))
         return LoxParseError(message, token)
 
-    def synchronize(self):
+    def synchronize(self) -> None:
         self.advance()
         while not self.is_at_end():
-            if self.previous().type == TokenType.SEMICOLON or self.check(
+            anchors = (
                 TokenType.CLASS,
                 TokenType.FUN,
                 TokenType.VAR,
@@ -363,6 +366,7 @@ class Parser:
                 TokenType.WHILE,
                 TokenType.PRINT,
                 TokenType.RETURN,
-            ):
+            )
+            if self.previous().type == TokenType.SEMICOLON or self.check(*anchors):
                 return
             self.advance()
