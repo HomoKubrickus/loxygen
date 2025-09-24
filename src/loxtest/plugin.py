@@ -16,6 +16,7 @@ from pytest import Config
 from pytest import Dir
 from pytest import ExceptionInfo
 from pytest import ExitCode
+from pytest import Session
 from pytest import TestReport
 
 from contract.contract import LoxStatus
@@ -35,23 +36,22 @@ class Option:
     help: str
     ini: dict[str, str | list[str]]
     cli: dict[str, str]
-    processor: Callable | None
+    processor: Callable | None = None
 
 
 OPTIONS: dict[str, Option] = {
-    "interpreter_cmd": Option(
-        name="interpreter_cmd",
+    "interpreter-cmd": Option(
+        name="interpreter-cmd",
         help="The command to run the interpreter.",
         ini={"type": "string", "default": DEFAULT_INTERPRETER},
         cli={},
         processor=shlex.split,
     ),
-    "skip_dirs": Option(
-        name="skip_dirs",
+    "skip-dirs": Option(
+        name="skip-dirs",
         help="Skips tests located within the specified directory names.",
         ini={"type": "args", "default": DEFAULT_SKIP_DIRS},
         cli={"action": "append"},
-        processor=None,
     ),
 }
 
@@ -197,24 +197,11 @@ class LoxFile(pytest.File):
         ]
 
     def collect(self):
-        item = TestItem.from_parent(
+        yield TestItem.from_parent(
             self,
             name=self.path.stem,
-            expected=None,
+            expected=self.parse_test(),
         )
-
-        root_path = self.config.rootpath
-        parts = self.path.relative_to(root_path).parent.parts
-        skip_dirs = self.parent.config.stash[SKIP_DIRS_KEY]
-
-        if not set(parts).isdisjoint(set(skip_dirs)):
-            skipped_dir = set(parts).intersection(skip_dirs).pop()
-            reason = f"Test located in a skipped directory: {skipped_dir}"
-            item.add_marker(pytest.mark.skip(reason=reason))
-        else:
-            item.expected = self.parse_test()
-
-        yield item
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -225,7 +212,7 @@ def pytest_addoption(parser: pytest.Parser):
 
 def get_value(config: Config, option: Option):
     name = option.name
-    if (value := config.getoption(name)) is None:
+    if (value := config.getoption(f"--{option.name}")) is None:
         value = config.getini(name)
     if (processor := option.processor) is not None:
         value = processor(value)
@@ -234,11 +221,11 @@ def get_value(config: Config, option: Option):
 
 
 def pytest_configure(config: Config):
-    option = OPTIONS["interpreter_cmd"]
+    option = OPTIONS["interpreter-cmd"]
     value = get_value(config, option)
     config.stash[INTERPRETER_CMD_KEY] = value
 
-    option = OPTIONS["skip_dirs"]
+    option = OPTIONS["skip-dirs"]
     value = get_value(config, option)
     config.stash[SKIP_DIRS_KEY] = value
 
@@ -251,6 +238,27 @@ def pytest_collect_file(parent: Dir, file_path: Path):
         )
 
     return None
+
+
+def mark_items_as_skipped(items: list[TestItem]):
+    for item in items:
+        root_path = item.config.rootpath
+        parts = item.path.relative_to(root_path).parent.parts
+        skip_dirs = item.parent.config.stash[SKIP_DIRS_KEY]
+        if not set(parts).isdisjoint(set(skip_dirs)):
+            skipped_dir = set(parts).intersection(skip_dirs).pop()
+            reason = f"Test located in a skipped directory: {skipped_dir}"
+            item.add_marker(pytest.mark.skip(reason=reason))
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_collection_modifyitems(session: Session, config: Config, items: list[TestItem]):
+    collected_count = len(items)
+
+    yield
+
+    if len(items) == collected_count:
+        mark_items_as_skipped(items)
 
 
 def pytest_runtest_makereport(item: TestItem, call: CallInfo) -> TestReport:

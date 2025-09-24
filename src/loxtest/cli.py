@@ -142,9 +142,9 @@ def handle_run(args: argparse.Namespace, *unknown_args: str) -> None:
         cmd.append("--help")
     else:
         if args.interpreter_cmd:
-            cmd.extend(["--interpreter_cmd", args.interpreter_cmd])
+            cmd.extend(["--interpreter-cmd", args.interpreter_cmd])
         if args.skip_dirs:
-            cmd.extend([item for dir in args.skip_dirs for item in ("--skip_dirs", dir)])
+            cmd.extend([item for dir in args.skip_dirs for item in ("--skip-dirs", dir)])
 
     cmd.extend(list(unknown_args))
 
@@ -196,7 +196,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser_process.add_argument(
         "-l",
-        "--line_number",
+        "--line-number",
         action="append",
         metavar="MODE",
         choices=["static", "runtime"],
@@ -227,13 +227,13 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser_run.add_argument(
         "-i",
-        "--interpreter_cmd",
+        "--interpreter-cmd",
         metavar="CMD",
         help="The command to run the interpreter.",
     )
     parser_run.add_argument(
-        "-s",
-        "--skip_dirs",
+        "-d",
+        "--skip-dirs",
         action="append",
         metavar="DIR",
         help="Skip tests within the specified subdirectory (e.g., benchmark)."

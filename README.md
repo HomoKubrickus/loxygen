@@ -109,7 +109,7 @@ This transformation adapts all error expectations to a single, consistent format
 + return "result"; // [line 3] Error at 'return': Can't return a value from an initializer.
 ```
 
-This transformation can be enabled using the `--line-number` (or `-l`) flag.
+This transformation can be enabled using the `--line-number` (or `-l`) flag, specifying either `static` or `runtime` as the error type.
 
 **2. Normalizing Language Prefixes**
 
@@ -120,19 +120,14 @@ The original suite includes error expectations tagged with `[java ...]` or `[c .
 +// [line 3] Error at 'b': Expect ')' after arguments.
 ```
 
-This transformation is disabled by default. It is intended to be used with the `--prefix` (or `-p`) flag. Test expectations on lines with prefixes that are not targeted for removal will be ignored by the test runner.
+This transformation can be enabled using the `--prefix` (or `-p`) flag, specifying either `java` or `c` as a prefix.
 
 #### Usage Example
-To process a directory by adding a line number to all error messages:
 
-```
-loxtest process -l static -l runtime lox-suite
-```
+To process a directory by adding a line number to only static error messages and removing the `java` prefix:
 
-The following adds line numbers to both static and runtime errors and removes the `java` prefix:
-
-```
-loxtest process -l static -l runtime -p java lox-suite
+```bash
+loxtest process -l static -p java lox-suite
 ```
 
 ### The run Command
@@ -141,45 +136,39 @@ The `run` command executes your processed test suite against a Lox interpreter u
 The command's structure is simple: `loxtest` recognizes its own specific options, and all other arguments are passed transparently to `pytest`.
 
 #### Specifying the Interpreter
-The primary option for loxtest is `--interpreter` (or `-i`), which specifies the **full command** used to execute your Lox interpreter. By default, it will use the `loxygen` interpreter installed with this package.
+The primary option for loxtest is `--interpreter-cmd` (or `-i`), which specifies the **full command** used to execute your Lox interpreter. By default, it will use the `loxygen` interpreter installed with this package.
 
 `loxtest` will pass the path to the `.lox` test file as the final argument to this command.
 
 #### Skipping Test Directories
 
-You can specify which test directories to skip using the `--skip-dirs` (or `-s`) flag. To skip multiple directories, use the flag for each one (e.g., `-s limit -s scanning`).
+You can specify which test directories to skip using the `--skip-dirs` (or `-d`) flag. This flag accepts full paths (e.g., `-d lox-suite/limit`) or just the directory name (e.g., `-d limit`).To skip multiple directories, use the flag for each one (e.g., `-d limit -d scanning`).
 
-By default, `loxtest` skips four directories: `benchmark`, `expressions`, `limit`, and `scanning`. Using the `-s` flag overrides this default list entirely. Since managing a long list via the command line can be cumbersome, the `skip_dirs` parameter can also be set from a standard configuration file (e.g., `pyproject.toml`).
+By default, `loxtest` skips four directories: `benchmark`, `expressions`, `limit`, and `scanning`. These defaults are automatically ignored if you explicitly select a test within them (e.g., via a path or a `-k` filter). Using the `-d` flag on the command line will replace the default list entirely for that run.
 
-The command-line flag takes precedence over the configuration file. If the `skip_dirs` parameter is not explicitly defined in the configuration file, the mentioned default value is automatically used.
+#### Using a Configuration File
+
+All options can be set in a standard configuration file (e.g., `pyproject.toml`). Command-line flags take priority over the configuration file, and if a setting is specified in neither, the built-in default is used.
+
+```toml
+[tool.pytest.ini_options]
+interpreter-cmd = "loxygen"
+skip-dirs = ["benchmark", "scanning", "limit", "expressions"]
+```
 
 #### Basic Usage
+
+All unrecognized arguments are passed directly to `pytest`, allowing you to use its command-line flags to control the test run. To view `pytest`'s own help message, use the dedicated `--pytest-help` flag, as `-h` is reserved for `loxtest`.
 
 ```bash
 # Run tests against loxygen, automatically discovering the tests.
 loxtest run
 
-# Explicitly test a script-based interpreter like loxygen
-loxtest run --interpreter "python -m loxygen" lox-suite
-```
+# If your interpreter requires arguments, wrap the command in quotes.
+loxtest run -i "./build/my_lox_interpreter --debug-mode"
 
-**Note**: When your interpreter command contains spaces, it should be enclosed in quotes.
-
-#### Leveraging pytest Features
-
-All unrecognized arguments are passed directly to `pytest`, allowing you to use its command-line flags to control the test run. To view `pytest`'s own help message, use the dedicated `--pytest-help` flag, as `-h` is reserved for `loxtest`.
-
-Here are a few common examples:
-
-```bash
-# Stop immediately on the first failure (-x)
-loxtest run -x lox-suite
-
-# Only run tests with "variables" in their name or path (-k)
-loxtest run -i "python -m loxygen"  -k "variables"
-
-# Run with verbose output to see the name of each test (-v)
-loxtest run  -v lox-suite
+# Use pytest flags
+loxtest run -x -k "variables"
 ```
 
 ## The Testing Contract

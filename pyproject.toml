@@ -45,6 +45,3 @@ select = ["E", "F", "I", "UP"]
 required-imports = ["from __future__ import annotations"]
 force-single-line = true
 
-[tool.pytest.ini_options]
-interpreter_cmd = "loxygen"
-skip_dirs = ["benchmark", "scanning", "limit", "expressions"]
