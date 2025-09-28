@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from os import EX_USAGE
 from pathlib import Path
 
-from contract.contract import LoxStatus
+from contract import LoxStatus
 from loxygen.exceptions import LoxRunTimeError
 from loxygen.interpreter import Interpreter
 from loxygen.parser import Parser

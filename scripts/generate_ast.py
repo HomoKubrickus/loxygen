@@ -56,14 +56,14 @@ NODE_DEFS: NodeDefinitions = {
 
 
 class ClassGenerator:
-    def __init__(self, indent: int = INDENT):
+    def __init__(self, indent: int = INDENT) -> None:
         self.indent = " " * indent
 
-    def format_line(self, text, level):
+    def format_line(self, text: str, level: int) -> str:
         return self.indent * level + text
 
     @staticmethod
-    def get_return_type(node_base_class):
+    def get_return_type(node_base_class: str) -> str:
         return "None" if node_base_class == "Stmt" else "LoxObject"
 
     @staticmethod
@@ -76,38 +76,38 @@ class NodeGenerator(ClassGenerator, ABC):
         self,
         class_name: str,
         indent: int = INDENT,
-    ):
+    ) -> None:
         super().__init__(indent)
         self.class_name = class_name
 
     @property
     @abstractmethod
-    def return_type(self):
+    def return_type(self) -> str:
         pass
 
     @property
     @abstractmethod
-    def inheritance_str(self):
+    def inheritance_str(self) -> str:
         pass
 
     @abstractmethod
-    def get_accept_body(self):
+    def get_accept_body(self) -> str:
         pass
 
-    def generate_class_declaration(self):
+    def generate_class_declaration(self) -> Iterator[str]:
         decorator = "@dataclass(frozen=True, slots=True)"
         declaration = f"class {self.class_name}{self.inheritance_str}:"
         yield from (self.format_line(line, 0) for line in (decorator, declaration))
 
-    def generate_class_attrs(self):
-        return ()
+    def generate_class_attrs(self) -> Iterator[str]:
+        yield from ()
 
-    def generate_accept_method(self):
+    def generate_accept_method(self) -> Iterator[str]:
         declaration = f"def accept(self, visitor: Visitor) -> {self.return_type}:"
         body = self.get_accept_body()
         yield from (self.format_line(declaration, 1), self.format_line(body, 2))
 
-    def generate_class(self):
+    def generate_class(self) -> Iterator[str]:
         cls = (
             self.generate_class_declaration(),
             self.generate_class_attrs(),
@@ -125,14 +125,14 @@ class BaseNodeGenerator(NodeGenerator):
         super().__init__(class_name, indent)
 
     @property
-    def return_type(self):
+    def return_type(self) -> str:
         return ClassGenerator.get_return_type(self.class_name)
 
     @property
-    def inheritance_str(self):
+    def inheritance_str(self) -> str:
         return ""
 
-    def get_accept_body(self):
+    def get_accept_body(self) -> str:
         return "pass"
 
 
@@ -149,28 +149,28 @@ class ConcreteNodeGenerator(NodeGenerator):
         self.attrs = attrs
 
     @property
-    def return_type(self):
+    def return_type(self) -> str:
         return ClassGenerator.get_return_type(self.base_class)
 
     @property
-    def inheritance_str(self):
+    def inheritance_str(self) -> str:
         return f"({self.base_class})"
 
-    def generate_class_attrs(self):
+    def generate_class_attrs(self) -> Iterator[str]:
         attrs = (self.format_line(f"{attr}:{annotation}", 1) for attr, annotation in self.attrs)
         yield from attrs
 
-    def get_accept_body(self):
+    def get_accept_body(self) -> str:
         method_name = self.get_visitor_method_name(self.class_name, self.base_class)
         return f"return visitor.{method_name}(self)"
 
 
 class VisitorGenerator(ClassGenerator):
-    def generate_class_declaration(self):
+    def generate_class_declaration(self) -> Iterator[str]:
         cls = "class Visitor(ABC):"
         yield self.format_line(cls, 0)
 
-    def generate_visit_method(self, node: str, node_base_class: str):
+    def generate_visit_method(self, node: str, node_base_class: str) -> Iterator[str]:
         decorator = "@abstractmethod"
         method_name = self.get_visitor_method_name(node, node_base_class)
         params = f"self, {node_base_class.lower()}: {node}"
@@ -184,7 +184,7 @@ class VisitorGenerator(ClassGenerator):
             self.format_line(body, 2),
         )
 
-    def generate_class(self, node_defs: NodeDefinitions):
+    def generate_class(self, node_defs: NodeDefinitions) -> Iterator[str]:
         declaration = self.generate_class_declaration()
         methods = chain.from_iterable(
             self.generate_visit_method(class_name, node_base_class)

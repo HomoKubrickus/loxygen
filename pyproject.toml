@@ -31,14 +31,7 @@ include = ["*"]
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"
-
-[[tool.mypy.overrides]]
-module = "loxygen.*"
 strict = true
-
-[[tool.mypy.overrides]]
-module = "loxtest.*"
-ignore_errors = true
 
 [tool.ruff]
 line-length = 100
@@ -53,4 +46,3 @@ select = ["E", "F", "I", "UP"]
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
 force-single-line = true
-

@@ -5,59 +5,73 @@ import shlex
 import subprocess
 import traceback
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Iterator
 from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
+from typing import Literal
+from typing import Self
+from typing import TypeVar
+from typing import cast
 
 import pytest
-from pytest import CallInfo
-from pytest import Config
-from pytest import Dir
-from pytest import ExceptionInfo
-from pytest import ExitCode
-from pytest import Session
-from pytest import TestReport
+from _pytest._code.code import TerminalRepr
+from _pytest._code.code import TracebackStyle
+from _pytest.terminal import TerminalReporter
 
-from contract.contract import LoxStatus
+from contract import LoxStatus
 
-if TYPE_CHECKING:
-    from _pytest._code.code import TerminalRepr
-    from _pytest.terminal import TerminalReporter
-
-
-DEFAULT_INTERPRETER = "loxygen"
+DEFAULT_INTERPRETER = ["loxygen"]
 DEFAULT_SKIP_DIRS = ["benchmark", "scanning", "limit", "expressions"]
+
+T = TypeVar("T")
+type PytestIniType = Literal["string", "paths", "pathlist", "args", "linelist", "bool"]
 
 
 @dataclass(frozen=True)
-class Option:
+class Option[T]:
     name: str
     help: str
-    ini: dict[str, str | list[str]]
-    cli: dict[str, str]
-    processor: Callable | None = None
+    ini_type: PytestIniType
+    ini_default: T
+    cli: dict[str, Any]
+    stash_key: pytest.StashKey[T] = field(default_factory=pytest.StashKey, init=False)
 
 
-OPTIONS: dict[str, Option] = {
-    "interpreter-cmd": Option(
+OPTIONS = {
+    "interpreter-cmd": Option[list[str]](
         name="interpreter-cmd",
         help="The command to run the interpreter.",
-        ini={"type": "string", "default": DEFAULT_INTERPRETER},
-        cli={},
-        processor=shlex.split,
+        ini_type="args",
+        ini_default=DEFAULT_INTERPRETER,
+        cli={"type": shlex.split},
     ),
-    "skip-dirs": Option(
+    "skip-dirs": Option[list[str]](
         name="skip-dirs",
         help="Skips tests located within the specified directory names.",
-        ini={"type": "args", "default": DEFAULT_SKIP_DIRS},
+        ini_type="linelist",
+        ini_default=DEFAULT_SKIP_DIRS,
         cli={"action": "append"},
     ),
 }
 
 
-INTERPRETER_CMD_KEY = pytest.StashKey[list[str]]()
-SKIP_DIRS_KEY = pytest.StashKey[list[str]]()
+class LoxTestError(Exception):
+    pass
+
+
+class FailedTestException(LoxTestError):
+    def __init__(self, failed_lines: tuple[int, ...], *args: object) -> None:
+        super().__init__(*args)
+        self.failed_lines = failed_lines
+
+
+class BackEndError(LoxTestError):
+    def __init__(self, error: str, *args: object) -> None:
+        super().__init__(*args)
+        self.error = error
 
 
 @dataclass
@@ -70,37 +84,23 @@ class LoxEvent:
 class ExpectedLoxEvent(LoxEvent):
     lineno: int
 
+    @classmethod
+    def from_match(cls, match: re.Match[str], lineno: int) -> Self:
+        group = match.lastgroup
+        assert group is not None
+        output = match.group(group).strip()
+        status = LoxStatus[group.upper()]
 
-class LoxTestError(Exception):
-    """Base exception for all errors raised by the loxtest plugin."""
-
-    pass
-
-
-class FailedTestException(LoxTestError):
-    """Indicates a mismatch between test output and expected output."""
-
-    def __init__(self, failed_lines: tuple[int], *args):
-        super().__init__(*args)
-        self.failed_lines = failed_lines
-
-
-class BackEndError(LoxTestError):
-    """Indicates a failure while trying to execute the lox interpreter."""
-
-    def __init__(self, error: str, *args):
-        super().__init__(*args)
-        self.error = error
+        return cls(status, output, lineno)
 
 
 class TestItem(pytest.Item):
-    def __init__(self, name: str, expected, **kwargs):
-        super().__init__(name, **kwargs)
-        self.name: str = name
+    def __init__(self, parent: LoxFile, name: str, expected: list[ExpectedLoxEvent]) -> None:
+        super().__init__(name, parent)
         self.expected: list[ExpectedLoxEvent] = expected
         self.output: list[LoxEvent] = []
 
-    def runtest(self):
+    def runtest(self) -> None:
         self.run_lox()
 
         if (output_len := len(self.output)) != (expected_len := len(self.expected)):
@@ -119,8 +119,8 @@ class TestItem(pytest.Item):
         if len(failed_lines):
             raise FailedTestException(failed_lines)
 
-    def run_lox(self):
-        cmd = self.config.stash[INTERPRETER_CMD_KEY] + [self.path]
+    def run_lox(self) -> None:
+        cmd = self.config.stash[OPTIONS["interpreter-cmd"].stash_key] + [self.path]
         try:
             process = subprocess.run(cmd, capture_output=True, text=True)
         except OSError:
@@ -140,13 +140,15 @@ class TestItem(pytest.Item):
             else:
                 raise BackEndError(process.stderr)
 
-    def repr_failure(self, excinfo: ExceptionInfo, *args, **kwargs) -> str | TerminalRepr:
+    def repr_failure(
+        self, excinfo: pytest.ExceptionInfo[BaseException], style: TracebackStyle | None = None
+    ) -> str | TerminalRepr:
         if isinstance(excinfo.value, FailedTestException):
             return self.colorize(*excinfo.value.failed_lines)
         if isinstance(excinfo.value, BackEndError):
             return excinfo.value.error
 
-        return super().repr_failure(excinfo, *args, **kwargs)
+        return super().repr_failure(excinfo, style)
 
     def add_result(self) -> list[str]:
         text = self.path.read_text().splitlines()
@@ -167,17 +169,11 @@ class TestItem(pytest.Item):
 
         return "\n".join(text)
 
-    def reportinfo(self):
+    def reportinfo(self) -> tuple[Path, int, str]:
         return self.path, 0, self.name
 
 
 class LoxFile(pytest.File):
-    @staticmethod
-    def process_match(result: re.Match):
-        for group, output in result.groupdict().items():
-            if output is not None:
-                return group, output
-
     def parse_test(self) -> list[ExpectedLoxEvent]:
         pattern = re.compile(
             rf"// expect: (?P<{LoxStatus.OK.name.lower()}>.*)|"
@@ -185,18 +181,13 @@ class LoxFile(pytest.File):
             rf"// expect runtime error: (?P<{LoxStatus.RUNTIME_ERROR.name.lower()}>(.*))",
         )
 
-        results = [
-            (lineno, *self.process_match(result))
-            for lineno, line in enumerate(self.path.read_text().splitlines())
-            if (result := re.search(pattern, line))
-        ]
-
         return [
-            ExpectedLoxEvent(LoxStatus[group.upper()], output.strip(), lineno)
-            for lineno, group, output in results
+            ExpectedLoxEvent.from_match(result, lineno)
+            for lineno, line in enumerate(self.path.read_text().splitlines())
+            if (result := re.search(pattern, line)) is not None
         ]
 
-    def collect(self):
+    def collect(self) -> Iterator[TestItem]:
         yield TestItem.from_parent(
             self,
             name=self.path.stem,
@@ -204,33 +195,27 @@ class LoxFile(pytest.File):
         )
 
 
-def pytest_addoption(parser: pytest.Parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     for option in OPTIONS.values():
-        parser.addini(option.name, option.help, **option.ini)
+        parser.addini(option.name, option.help, option.ini_type, option.ini_default)
         parser.addoption(f"--{option.name}", help=option.help, **option.cli)
 
 
-def get_value(config: Config, option: Option):
+def get_value[T](config: pytest.Config, option: Option[T]) -> T:
     name = option.name
-    if (value := config.getoption(f"--{option.name}")) is None:
+    if (value := config.getoption(f"--{name}")) is None:
         value = config.getini(name)
-    if (processor := option.processor) is not None:
-        value = processor(value)
 
-    return value
+    return cast(T, value)
 
 
-def pytest_configure(config: Config):
-    option = OPTIONS["interpreter-cmd"]
-    value = get_value(config, option)
-    config.stash[INTERPRETER_CMD_KEY] = value
-
-    option = OPTIONS["skip-dirs"]
-    value = get_value(config, option)
-    config.stash[SKIP_DIRS_KEY] = value
+def pytest_configure(config: pytest.Config) -> None:
+    for option in OPTIONS.values():
+        value = get_value(config, option)
+        config.stash[option.stash_key] = value
 
 
-def pytest_collect_file(parent: Dir, file_path: Path):
+def pytest_collect_file(parent: pytest.Dir, file_path: Path) -> pytest.Collector | None:
     if file_path.suffix == ".lox":
         return LoxFile.from_parent(
             parent,
@@ -240,11 +225,11 @@ def pytest_collect_file(parent: Dir, file_path: Path):
     return None
 
 
-def mark_items_as_skipped(items: list[TestItem]):
+def mark_items_as_skipped(items: list[TestItem]) -> None:
     for item in items:
         root_path = item.config.rootpath
         parts = item.path.relative_to(root_path).parent.parts
-        skip_dirs = item.parent.config.stash[SKIP_DIRS_KEY]
+        skip_dirs = item.config.stash[OPTIONS["skip-dirs"].stash_key]
         if not set(parts).isdisjoint(set(skip_dirs)):
             skipped_dir = set(parts).intersection(skip_dirs).pop()
             reason = f"Test located in a skipped directory: {skipped_dir}"
@@ -252,17 +237,17 @@ def mark_items_as_skipped(items: list[TestItem]):
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_collection_modifyitems(session: Session, config: Config, items: list[TestItem]):
+def pytest_collection_modifyitems(
+    session: pytest.Session, config: pytest.Config, items: list[TestItem]
+) -> Generator[None, None, None]:
     collected_count = len(items)
-
     yield
-
     if len(items) == collected_count:
         mark_items_as_skipped(items)
 
 
-def pytest_runtest_makereport(item: TestItem, call: CallInfo) -> TestReport:
-    report = TestReport.from_item_and_call(item, call)
+def pytest_runtest_makereport(item: TestItem, call: pytest.CallInfo[None]) -> pytest.TestReport:
+    report = pytest.TestReport.from_item_and_call(item, call)
     if call.when == "call" and call.excinfo:
         if isinstance(call.excinfo.value, BackEndError):
             report.user_properties.append(
@@ -274,13 +259,13 @@ def pytest_runtest_makereport(item: TestItem, call: CallInfo) -> TestReport:
 
 def pytest_terminal_summary(
     terminalreporter: TerminalReporter,
-    exitstatus: ExitCode,
-    config: Config,
-):
+    exitstatus: pytest.ExitCode,
+    config: pytest.Config,
+) -> None:
     if config.getoption("--collect-only", default=False):
         return None
 
-    failed_reports: list[TestReport] = terminalreporter.getreports("failed")
+    failed_reports: list[pytest.TestReport] = terminalreporter.getreports("failed")
     if not (failed_reports := [report for report in failed_reports if report.when == "call"]):
         return None
 

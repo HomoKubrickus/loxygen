@@ -2,6 +2,7 @@
 
 [![PyPI version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://pypi.org/project/loxygen/)
 [![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)]()
+[![mypy strict](https://img.shields.io/badge/mypy-strict-blue.svg)](https://mypy.readthedocs.io/en/stable/command_line.html#cmdoption-mypy-strict)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/HomoKubrickus/loxygen/blob/main/LICENSE)
 
 

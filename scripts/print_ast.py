@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 
 from loxygen import nodes
 from loxygen.parser import Parser
@@ -9,29 +10,29 @@ from loxygen.scanner import Scanner
 
 
 class ASTPrinter:
-    def visit_binary_expr(self, expression: nodes.Binary):
+    def visit_binary_expr(self, expression: nodes.Binary) -> str:
         return self.parenthesize(expression.operator.lexeme, expression.left, expression.right)
 
-    def visit_grouping_expr(self, expression: nodes.Grouping):
+    def visit_grouping_expr(self, expression: nodes.Grouping) -> str:
         return self.parenthesize("group", expression.expr)
 
-    def visit_literal_expr(self, expression: nodes.Literal):
+    def visit_literal_expr(self, expression: nodes.Literal) -> str:
         if expression.value is None:
             return "nil"
         return str(expression.value)
 
-    def visit_unary_expr(self, expression: nodes.Unary):
+    def visit_unary_expr(self, expression: nodes.Unary) -> str:
         return self.parenthesize(expression.operator.lexeme, expression.right)
 
-    def parenthesize(self, name: str, *exprs: nodes.Expr):
+    def parenthesize(self, name: str, *exprs: nodes.Expr) -> str:
         output = f"({name}"
         for expression in exprs:
-            output += f" {expression.accept(self)}"  # type: ignore[arg-type]
+            output += f" {expression.accept(cast(nodes.Visitor, self))}"
         output += ")"
         return output
 
-    def print(self, expression: nodes.Expr):
-        return expression.accept(self)  # type: ignore[arg-type]
+    def print(self, expression: nodes.Expr) -> str:
+        return cast(str, expression.accept(cast(nodes.Visitor, self)))
 
 
 def generate_ast_string(inp: str) -> str:
@@ -41,7 +42,7 @@ def generate_ast_string(inp: str) -> str:
     return ASTPrinter().print(expression)
 
 
-def test(argv: list[str]):
+def test(argv: list[str]) -> None:
     test_path = Path("expressions") / "parse.lox"
     if len(argv) != 2:
         raise ValueError(f"Only one argument is allowed: the parent directory of {test_path}.")
