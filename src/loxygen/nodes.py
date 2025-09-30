@@ -4,57 +4,57 @@ from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from loxygen.runtime import LoxObject
+from loxygen.token import LiteralValue
 from loxygen.token import Token
 
 
-class Visitor(ABC):
+class Visitor[T](ABC):
     @abstractmethod
-    def visit_assign_expr(self, expr: Assign) -> LoxObject:
+    def visit_assign_expr(self, expr: Assign) -> T:
         pass
 
     @abstractmethod
-    def visit_binary_expr(self, expr: Binary) -> LoxObject:
+    def visit_binary_expr(self, expr: Binary) -> T:
         pass
 
     @abstractmethod
-    def visit_call_expr(self, expr: Call) -> LoxObject:
+    def visit_call_expr(self, expr: Call) -> T:
         pass
 
     @abstractmethod
-    def visit_get_expr(self, expr: Get) -> LoxObject:
+    def visit_get_expr(self, expr: Get) -> T:
         pass
 
     @abstractmethod
-    def visit_grouping_expr(self, expr: Grouping) -> LoxObject:
+    def visit_grouping_expr(self, expr: Grouping) -> T:
         pass
 
     @abstractmethod
-    def visit_literal_expr(self, expr: Literal) -> LoxObject:
+    def visit_literal_expr(self, expr: Literal) -> T:
         pass
 
     @abstractmethod
-    def visit_logical_expr(self, expr: Logical) -> LoxObject:
+    def visit_logical_expr(self, expr: Logical) -> T:
         pass
 
     @abstractmethod
-    def visit_set_expr(self, expr: Set) -> LoxObject:
+    def visit_set_expr(self, expr: Set) -> T:
         pass
 
     @abstractmethod
-    def visit_super_expr(self, expr: Super) -> LoxObject:
+    def visit_super_expr(self, expr: Super) -> T:
         pass
 
     @abstractmethod
-    def visit_this_expr(self, expr: This) -> LoxObject:
+    def visit_this_expr(self, expr: This) -> T:
         pass
 
     @abstractmethod
-    def visit_unary_expr(self, expr: Unary) -> LoxObject:
+    def visit_unary_expr(self, expr: Unary) -> T:
         pass
 
     @abstractmethod
-    def visit_variable_expr(self, expr: Variable) -> LoxObject:
+    def visit_variable_expr(self, expr: Variable) -> T:
         pass
 
     @abstractmethod
@@ -95,14 +95,16 @@ class Visitor(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class Expr:
-    def accept(self, visitor: Visitor) -> LoxObject:
+class Expr(ABC):
+    @abstractmethod
+    def accept[T](self, visitor: Visitor[T]) -> T:
         pass
 
 
 @dataclass(frozen=True, slots=True)
-class Stmt:
-    def accept(self, visitor: Visitor) -> None:
+class Stmt(ABC):
+    @abstractmethod
+    def accept[T](self, visitor: Visitor[T]) -> None:
         pass
 
 
@@ -111,7 +113,7 @@ class Assign(Expr):
     name: Token
     value: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_assign_expr(self)
 
 
@@ -121,7 +123,7 @@ class Binary(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_binary_expr(self)
 
 
@@ -131,7 +133,7 @@ class Call(Expr):
     paren: Token
     arguments: list[Expr]
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_call_expr(self)
 
 
@@ -140,7 +142,7 @@ class Get(Expr):
     object: Expr
     name: Token
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_get_expr(self)
 
 
@@ -148,15 +150,15 @@ class Get(Expr):
 class Grouping(Expr):
     expr: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_grouping_expr(self)
 
 
 @dataclass(frozen=True, slots=True)
 class Literal(Expr):
-    value: LoxObject
+    value: LiteralValue
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_literal_expr(self)
 
 
@@ -166,7 +168,7 @@ class Logical(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_logical_expr(self)
 
 
@@ -176,7 +178,7 @@ class Set(Expr):
     name: Token
     value: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_set_expr(self)
 
 
@@ -185,7 +187,7 @@ class Super(Expr):
     keyword: Token
     method: Token
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_super_expr(self)
 
 
@@ -193,7 +195,7 @@ class Super(Expr):
 class This(Expr):
     keyword: Token
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_this_expr(self)
 
 
@@ -202,7 +204,7 @@ class Unary(Expr):
     operator: Token
     right: Expr
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_unary_expr(self)
 
 
@@ -210,7 +212,7 @@ class Unary(Expr):
 class Variable(Expr):
     name: Token
 
-    def accept(self, visitor: Visitor) -> LoxObject:
+    def accept[T](self, visitor: Visitor[T]) -> T:
         return visitor.visit_variable_expr(self)
 
 
@@ -218,7 +220,7 @@ class Variable(Expr):
 class Block(Stmt):
     statements: list[Stmt]
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_block_stmt(self)
 
 
@@ -226,7 +228,7 @@ class Block(Stmt):
 class Expression(Stmt):
     expr: Expr
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_expression_stmt(self)
 
 
@@ -236,7 +238,7 @@ class Function(Stmt):
     params: list[Token]
     body: list[Stmt]
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_function_stmt(self)
 
 
@@ -246,7 +248,7 @@ class Class(Stmt):
     superclass: Variable | None
     methods: list[Function]
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_class_stmt(self)
 
 
@@ -256,7 +258,7 @@ class If(Stmt):
     then_branch: Stmt
     else_branch: Stmt | None
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_if_stmt(self)
 
 
@@ -264,7 +266,7 @@ class If(Stmt):
 class Print(Stmt):
     expr: Expr
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_print_stmt(self)
 
 
@@ -273,7 +275,7 @@ class Return(Stmt):
     keyword: Token
     value: Expr | None
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_return_stmt(self)
 
 
@@ -282,7 +284,7 @@ class Var(Stmt):
     name: Token
     initializer: Expr | None
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_var_stmt(self)
 
 
@@ -291,5 +293,5 @@ class While(Stmt):
     condition: Expr
     body: Stmt
 
-    def accept(self, visitor: Visitor) -> None:
+    def accept[T](self, visitor: Visitor[T]) -> None:
         return visitor.visit_while_stmt(self)

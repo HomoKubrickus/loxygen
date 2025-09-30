@@ -7,6 +7,7 @@ from enum import auto
 
 from loxygen import nodes
 from loxygen.interpreter import Interpreter
+from loxygen.runtime import LoxObject
 from loxygen.token import Token
 
 
@@ -23,7 +24,7 @@ class ClassType(Enum):
     SUBCLASS = auto()
 
 
-class Resolver(nodes.Visitor):
+class Resolver(nodes.Visitor[LoxObject]):
     def __init__(self, interpreter: Interpreter):
         self.interpreter = interpreter
         self.scopes: list[dict[str, bool]] = []

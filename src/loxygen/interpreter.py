@@ -14,9 +14,9 @@ from loxygen.token import Token
 from loxygen.token import TokenType
 
 
-class Interpreter(nodes.Visitor):
+class Interpreter(nodes.Visitor[LoxObject]):
     def __init__(self) -> None:
-        self.globals = Environment()
+        self.globals: Environment[LoxObject] = Environment()
         self.globals.define("clock", Clock())
         self.locals: dict[nodes.Expr, int] = {}
 
@@ -124,8 +124,8 @@ class Interpreter(nodes.Visitor):
                 return not self.is_equal(left, right)
             case TokenType.EQUAL_EQUAL:
                 return self.is_equal(left, right)
-
-        return None
+            case _:
+                return None
 
     @staticmethod
     def check_number_operands(
@@ -189,7 +189,7 @@ class Interpreter(nodes.Visitor):
     def resolve(self, expr: nodes.Expr, depth: int) -> None:
         self.locals[expr] = depth
 
-    def execute_block(self, stmts: list[nodes.Stmt], environment: Environment) -> None:
+    def execute_block(self, stmts: list[nodes.Stmt], environment: Environment[LoxObject]) -> None:
         enclosing = self.env
         try:
             self.env = environment
@@ -217,7 +217,7 @@ class Interpreter(nodes.Visitor):
             self.env = Environment(self.env)
             self.env.define("super", superclass)
 
-        methods = {}
+        methods: dict[str, LoxFunction] = {}
         for method in stmt.methods:
             is_initializer = method.name.lexeme == "init"
             function = LoxFunction(method, self.env, is_initializer)

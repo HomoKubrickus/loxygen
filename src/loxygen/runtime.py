@@ -3,16 +3,13 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 from time import perf_counter_ns
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from loxygen import nodes
 from loxygen.environment import Environment
 from loxygen.exceptions import LoxRunTimeError
 from loxygen.token import LiteralValue
 from loxygen.token import Token
-
-if TYPE_CHECKING:
-    from loxygen.interpreter import Interpreter
 
 type LoxObject = LiteralValue | LoxCallable | LoxInstance
 
@@ -23,9 +20,15 @@ class Return(RuntimeError):
         self.value = value
 
 
+class Executor(Protocol):
+    def execute_block(
+        self, stmts: list[nodes.Stmt], environment: Environment[LoxObject]
+    ) -> None: ...
+
+
 class LoxCallable(ABC):
     @abstractmethod
-    def call(self, interpreter: Interpreter, arguments: list[LoxObject]) -> LoxObject:
+    def call(self, interpreter: Executor, arguments: list[LoxObject]) -> LoxObject:
         pass
 
     @abstractmethod
@@ -37,7 +40,7 @@ class LoxFunction(LoxCallable):
     def __init__(
         self,
         declaration: nodes.Function,
-        closure: Environment,
+        closure: Environment[LoxObject],
         is_initializer: bool,
     ):
         self.is_initializer = is_initializer
@@ -50,7 +53,7 @@ class LoxFunction(LoxCallable):
 
         return LoxFunction(self.declaration, env, self.is_initializer)
 
-    def call(self, interpreter: Interpreter, arguments: list[LoxObject]) -> LoxObject:
+    def call(self, interpreter: Executor, arguments: list[LoxObject]) -> LoxObject:
         env = Environment(self.closure)
         for param, arg in zip(self.declaration.params, arguments, strict=False):
             env.define(param.lexeme, arg)
@@ -88,7 +91,7 @@ class LoxClass(LoxCallable):
 
         return None
 
-    def call(self, interpreter: Interpreter, arguments: list[LoxObject]) -> LoxInstance:
+    def call(self, interpreter: Executor, arguments: list[LoxObject]) -> LoxInstance:
         instance = LoxInstance(self)
         if (initializer := self.find_method("init")) is not None:
             initializer.bind(instance).call(interpreter, arguments)
@@ -127,8 +130,7 @@ class LoxInstance:
 
 
 class Clock(LoxCallable):
-    @staticmethod
-    def call(interpreter: Interpreter, arguments: list[LoxObject]) -> float:
+    def call(self, interpreter: Executor, arguments: list[LoxObject]) -> float:
         return perf_counter_ns() / 1000
 
     def arity(self) -> int:

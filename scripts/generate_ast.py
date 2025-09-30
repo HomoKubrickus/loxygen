@@ -15,6 +15,7 @@ type NodeDefinitions = dict[str, SubclassMap]
 
 
 PACKAGE_NAME = "loxygen"
+TYPE_VAR = "T"
 INDENT = 4
 
 
@@ -25,7 +26,7 @@ NODE_DEFS: NodeDefinitions = {
         "Call": (("callee", "Expr"), ("paren", "Token"), ("arguments", "list[Expr]")),
         "Get": (("object", "Expr"), ("name", "Token")),
         "Grouping": (("expr", "Expr"),),
-        "Literal": (("value", "LoxObject"),),
+        "Literal": (("value", "LiteralValue"),),
         "Logical": (("left", "Expr"), ("operator", "Token"), ("right", "Expr")),
         "Set": (("object", "Expr"), ("name", "Token"), ("value", "Expr")),
         "Super": (("keyword", "Token"), ("method", "Token")),
@@ -56,15 +57,15 @@ NODE_DEFS: NodeDefinitions = {
 
 
 class ClassGenerator:
-    def __init__(self, indent: int = INDENT) -> None:
+    def __init__(self, type_var: str, indent: int = INDENT) -> None:
+        self.type_var = type_var
         self.indent = " " * indent
 
     def format_line(self, text: str, level: int) -> str:
         return self.indent * level + text
 
-    @staticmethod
-    def get_return_type(node_base_class: str) -> str:
-        return "None" if node_base_class == "Stmt" else "LoxObject"
+    def get_return_type(self, node_base_class: str) -> str:
+        return "None" if node_base_class == "Stmt" else self.type_var
 
     @staticmethod
     def get_visitor_method_name(node_class_name: str, base_class_name: str) -> str:
@@ -75,10 +76,13 @@ class NodeGenerator(ClassGenerator, ABC):
     def __init__(
         self,
         class_name: str,
+        base_class: str,
+        type_var: str,
         indent: int = INDENT,
     ) -> None:
-        super().__init__(indent)
+        super().__init__(type_var, indent)
         self.class_name = class_name
+        self.base_class = base_class
 
     @property
     @abstractmethod
@@ -86,8 +90,11 @@ class NodeGenerator(ClassGenerator, ABC):
         pass
 
     @property
-    @abstractmethod
     def inheritance_str(self) -> str:
+        return f"({self.base_class})"
+
+    @abstractmethod
+    def get_accept_decorator(self) -> str:
         pass
 
     @abstractmethod
@@ -103,9 +110,19 @@ class NodeGenerator(ClassGenerator, ABC):
         yield from ()
 
     def generate_accept_method(self) -> Iterator[str]:
-        declaration = f"def accept(self, visitor: Visitor) -> {self.return_type}:"
+        decorator = self.get_accept_decorator()
+        declaration = (
+            f"def accept[{self.type_var}]"
+            f"(self, visitor: Visitor[{self.type_var}])"
+            f" -> {self.return_type}:"
+        )
         body = self.get_accept_body()
-        yield from (self.format_line(declaration, 1), self.format_line(body, 2))
+
+        yield from (
+            self.format_line(decorator, 1),
+            self.format_line(declaration, 1),
+            self.format_line(body, 2),
+        )
 
     def generate_class(self) -> Iterator[str]:
         cls = (
@@ -120,17 +137,17 @@ class BaseNodeGenerator(NodeGenerator):
     def __init__(
         self,
         class_name: str,
+        type_var: str,
         indent: int = INDENT,
     ):
-        super().__init__(class_name, indent)
+        super().__init__(class_name, "ABC", type_var, indent)
 
     @property
     def return_type(self) -> str:
-        return ClassGenerator.get_return_type(self.class_name)
+        return self.get_return_type(self.class_name)
 
-    @property
-    def inheritance_str(self) -> str:
-        return ""
+    def get_accept_decorator(self) -> str:
+        return "@abstractmethod"
 
     def get_accept_body(self) -> str:
         return "pass"
@@ -142,23 +159,22 @@ class ConcreteNodeGenerator(NodeGenerator):
         class_name: str,
         base_class: str,
         attrs: FieldList,
+        type_var: str,
         indent: int = INDENT,
     ):
-        super().__init__(class_name, indent)
-        self.base_class = base_class
+        super().__init__(class_name, base_class, type_var, indent)
         self.attrs = attrs
 
     @property
     def return_type(self) -> str:
-        return ClassGenerator.get_return_type(self.base_class)
-
-    @property
-    def inheritance_str(self) -> str:
-        return f"({self.base_class})"
+        return self.get_return_type(self.base_class)
 
     def generate_class_attrs(self) -> Iterator[str]:
         attrs = (self.format_line(f"{attr}:{annotation}", 1) for attr, annotation in self.attrs)
         yield from attrs
+
+    def get_accept_decorator(self) -> str:
+        return ""
 
     def get_accept_body(self) -> str:
         method_name = self.get_visitor_method_name(self.class_name, self.base_class)
@@ -167,7 +183,7 @@ class ConcreteNodeGenerator(NodeGenerator):
 
 class VisitorGenerator(ClassGenerator):
     def generate_class_declaration(self) -> Iterator[str]:
-        cls = "class Visitor(ABC):"
+        cls = f"class Visitor[{self.type_var}](ABC):"
         yield self.format_line(cls, 0)
 
     def generate_visit_method(self, node: str, node_base_class: str) -> Iterator[str]:
@@ -214,21 +230,23 @@ def format_file(text: str) -> str:
     return process.stdout
 
 
-def generate_all_nodes(package_name: str, node_defs: NodeDefinitions) -> Iterator[str]:
+def generate_all_nodes(
+    package_name: str, type_var: str, node_defs: NodeDefinitions
+) -> Iterator[str]:
     imports = (
-        "from __future__ import annotations\n",
+        "from __future__ import annotations",
         "from abc import ABC",
         "from abc import abstractmethod",
-        "from dataclasses import dataclass\n",
-        f"from {package_name}.runtime import LoxObject",
+        "from dataclasses import dataclass",
+        f"from {package_name}.token import LiteralValue",
         f"from {package_name}.token import Token",
     )
-    visitor = VisitorGenerator().generate_class(node_defs)
+    visitor = VisitorGenerator(type_var).generate_class(node_defs)
     base_nodes = chain.from_iterable(
-        BaseNodeGenerator(base_class).generate_class() for base_class in node_defs
+        BaseNodeGenerator(base_class, type_var).generate_class() for base_class in node_defs
     )
     concrete_nodes = chain.from_iterable(
-        ConcreteNodeGenerator(class_name, base_class, attrs).generate_class()
+        ConcreteNodeGenerator(class_name, base_class, attrs, type_var).generate_class()
         for base_class, subclass_defs in node_defs.items()
         for class_name, attrs in subclass_defs.items()
     )
@@ -236,8 +254,8 @@ def generate_all_nodes(package_name: str, node_defs: NodeDefinitions) -> Iterato
     yield from chain(imports, visitor, base_nodes, concrete_nodes)
 
 
-def generate_nodes_file(package_name: str, node_defs: NodeDefinitions) -> None:
-    lines = generate_all_nodes(package_name, node_defs)
+def generate_nodes_file(package_name: str, type_var: str, node_defs: NodeDefinitions) -> None:
+    lines = generate_all_nodes(package_name, type_var, node_defs)
     text = format_file("\n".join(lines))
     root = Path(__file__).parent.parent.resolve()
     filename = root / "src" / package_name / "nodes.py"
@@ -246,4 +264,4 @@ def generate_nodes_file(package_name: str, node_defs: NodeDefinitions) -> None:
 
 
 if __name__ == "__main__":
-    generate_nodes_file(PACKAGE_NAME, NODE_DEFS)
+    generate_nodes_file(PACKAGE_NAME, TYPE_VAR, NODE_DEFS)

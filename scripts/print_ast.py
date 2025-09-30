@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import cast
@@ -27,12 +28,12 @@ class ASTPrinter:
     def parenthesize(self, name: str, *exprs: nodes.Expr) -> str:
         output = f"({name}"
         for expression in exprs:
-            output += f" {expression.accept(cast(nodes.Visitor, self))}"
+            output += f" {expression.accept(cast(nodes.Visitor[str], self))}"
         output += ")"
         return output
 
     def print(self, expression: nodes.Expr) -> str:
-        return cast(str, expression.accept(cast(nodes.Visitor, self)))
+        return expression.accept(cast(nodes.Visitor[str], self))
 
 
 def generate_ast_string(inp: str) -> str:
@@ -52,11 +53,10 @@ def test(argv: list[str]) -> None:
         raise FileNotFoundError(f"The provided path does not contain {test_path}.")
 
     text = full_path.read_text()
-    for line in text.splitlines():
-        if not line.startswith("//"):
-            code = line.strip()
-        elif line.startswith("// expect:"):
-            expected = line.removeprefix("// expect:").strip()
+    assert (match := re.search(r"// expect: (.*)", text)) is not None
+    code = match.group(1)
+    assert (match := re.search(r"^(?!//).*", text, re.MULTILINE)) is not None
+    expected = match.group(0)
 
     actual = generate_ast_string(code)
 

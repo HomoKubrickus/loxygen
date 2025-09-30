@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import readline  # noqa: F401
+import readline
 import sys
 from collections.abc import Iterable
 from os import EX_USAGE
@@ -37,6 +37,7 @@ class Lox:
             sys.exit(status.value)
 
     def run_prompt(self) -> None:
+        _ = readline
         while True:
             line = input(">")
             if line == "":
@@ -79,13 +80,13 @@ class Lox:
         context: int | Token,
         message: str,
     ) -> None:
-        if isinstance(context, int):
-            line = context
-            token = ""
-        elif isinstance(context, Token):
+        if isinstance(context, Token):
             line = context.line
             position = "end" if context.type == TokenType.EOF else f"'{context.lexeme}'"
             token = f"Error at {position}: "
+        else:
+            line = context
+            token = ""
 
         print(f"[line {line}] {token}{message}", file=sys.stderr)
 

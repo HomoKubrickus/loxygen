@@ -1,36 +1,33 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Self
 
 from loxygen.exceptions import LoxRunTimeError
 from loxygen.token import Token
 
-if TYPE_CHECKING:
-    from loxygen.runtime import LoxObject
 
-
-class Environment:
-    def __init__(self, enclosing: Environment | None = None):
-        self.values: dict[str, LoxObject] = {}
+class Environment[T]:
+    def __init__(self, enclosing: Self | None = None):
+        self.values: dict[str, T] = {}
         self.enclosing = enclosing
 
-    def define(self, name: str, value: LoxObject) -> None:
+    def define(self, name: str, value: T) -> None:
         self.values[name] = value
 
-    def ancestor(self, distance: int) -> Environment:
+    def ancestor(self, distance: int) -> Self:
         environment = self
         for _ in range(distance):
             assert environment.enclosing is not None
             environment = environment.enclosing
         return environment
 
-    def get_at(self, distance: int, name: str) -> LoxObject:
+    def get_at(self, distance: int, name: str) -> T:
         return self.ancestor(distance).values[name]
 
-    def assign_at(self, distance: int, name: Token, value: LoxObject) -> None:
+    def assign_at(self, distance: int, name: Token, value: T) -> None:
         self.ancestor(distance).values[name.lexeme] = value
 
-    def get(self, name: Token) -> LoxObject:
+    def get(self, name: Token) -> T:
         try:
             return self.values[name.lexeme]
         except KeyError:
@@ -41,7 +38,7 @@ class Environment:
 
         raise LoxRunTimeError(name, f"Undefined variable '{name.lexeme}'.")
 
-    def assign(self, name: Token, value: LoxObject) -> None:
+    def assign(self, name: Token, value: T) -> None:
         if name.lexeme in self.values:
             self.values[name.lexeme] = value
             return

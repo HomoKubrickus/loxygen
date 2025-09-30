@@ -10,10 +10,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
-from typing import Any
 from typing import Literal
 from typing import Self
-from typing import TypeVar
 from typing import cast
 
 import pytest
@@ -26,7 +24,6 @@ from contract import LoxStatus
 DEFAULT_INTERPRETER = ["loxygen"]
 DEFAULT_SKIP_DIRS = ["benchmark", "scanning", "limit", "expressions"]
 
-T = TypeVar("T")
 type PytestIniType = Literal["string", "paths", "pathlist", "args", "linelist", "bool"]
 
 
@@ -36,8 +33,8 @@ class Option[T]:
     help: str
     ini_type: PytestIniType
     ini_default: T
-    cli: dict[str, Any]
-    stash_key: pytest.StashKey[T] = field(default_factory=pytest.StashKey, init=False)
+    cli: dict[str, object]
+    stash_key: pytest.StashKey[T] = field(default_factory=pytest.StashKey[T], init=False)
 
 
 OPTIONS = {
@@ -262,7 +259,7 @@ def pytest_terminal_summary(
     exitstatus: pytest.ExitCode,
     config: pytest.Config,
 ) -> None:
-    if config.getoption("--collect-only", default=False):
+    if config.getoption("--collect-only"):
         return None
 
     failed_reports: list[pytest.TestReport] = terminalreporter.getreports("failed")

@@ -47,7 +47,7 @@ class Parser:
 
         self.consume(TokenType.LEFT_BRACE, "Expect '{' before class body.")
 
-        methods = []
+        methods: list[nodes.Function] = []
         while not (self.check(TokenType.RIGHT_BRACE) or self.is_at_end()):
             methods.append(self.function("method"))
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from enum import auto
 
-type LiteralValue = float | str | bool | None
+type LiteralValue = bool | float | str | None
 
 
 class TokenType(Enum):
