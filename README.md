@@ -76,8 +76,17 @@ loxtest run
 
 This will execute the full suite and display the results using the standard `pytest` output.
 
+## The Loxygen Interpreter
 
-## Command Reference
+The interpreter's architecture follows the design from the *Crafting Interpreters* book, with the notable deviation being the consolidation of all runtime objects (`LoxCallable`, `LoxFunction`, etc.) into a single `runtime.py` module.
+
+The diagram below illustrates the dependency hierarchy between the interpreter's modules:
+
+<p align="center">
+  <img src="./assets/loxygen-architecture.svg" alt="Internal architecture of the loken interpreter" width="600">
+</p>
+
+## The Loxtest Testing Tool
 
 This section provides a complete guide to the `loxtest` tool.
 
